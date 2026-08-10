@@ -101,7 +101,7 @@ async function main() {
       divisionKey: "선행도장과",
     },
     {
-      name: "성기업",
+      name: "성기협",
       email: "sung0608@hd.com",
       role: Role.MEMBER,
       divisionKey: "선행도장과",
@@ -137,7 +137,7 @@ async function main() {
     {
       name: "김대성",
       email: "dae0179@hd.com",
-      role: Role.MEMBER,
+      role: Role.DIV_HEAD,
       divisionKey: "설비과",
     },
     {
@@ -161,7 +161,7 @@ async function main() {
       divisionKey: "철목정도과",
     },
     {
-      name: "김성득",
+      name: "김성록",
       email: "ttyf99@hd.com",
       role: Role.MEMBER,
       divisionKey: "철목정도과",
@@ -169,13 +169,13 @@ async function main() {
 
     // 외업도장과
     {
-      name: "김의탁",
+      name: "김의택",
       email: "tech67@hd.com",
       role: Role.DIV_HEAD,
       divisionKey: "외업도장과",
     },
     {
-      name: "정성우",
+      name: "정성운",
       email: "jsu3963@hd.com",
       role: Role.MEMBER,
       divisionKey: "외업도장과",
@@ -187,7 +187,7 @@ async function main() {
       divisionKey: "외업도장과",
     },
     {
-      name: "유중탁",
+      name: "유종탁",
       email: "yoot@hd.com",
       role: Role.MEMBER,
       divisionKey: "외업도장과",
@@ -195,7 +195,7 @@ async function main() {
 
     // 통합공정과
     {
-      name: "황득곤",
+      name: "황득근",
       email: "dghwang@hd.com",
       role: Role.DIV_HEAD,
       divisionKey: "통합공정과",
