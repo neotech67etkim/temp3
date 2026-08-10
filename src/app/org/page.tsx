@@ -112,7 +112,7 @@ export default async function OrgPage() {
                               className="flex items-center gap-2 text-xs text-slate-600"
                             >
                               <span>
-                                {u.name} · {ROLE_LABEL[u.role]} (과원)
+                                {u.name} · {ROLE_LABEL[u.role]}
                               </span>
                               {u.id !== currentUserId && (
                                 <DeleteForm

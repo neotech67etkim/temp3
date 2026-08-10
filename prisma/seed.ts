@@ -68,6 +68,187 @@ async function main() {
     });
   }
 
+  // --- 부서원 (2026-08 조직도 기준) ---
+  // divisionKey가 없으면 부서 직속(부서장 등), 있으면 해당 과 소속(과원 또는 과장)
+  type StaffSeed = {
+    name: string;
+    email: string;
+    role: Role;
+    divisionKey?: DivisionKey;
+  };
+
+  const staff: StaffSeed[] = [
+    { name: "이재석", email: "leejs@hd.com", role: Role.DEPT_HEAD },
+    { name: "Q5L0관리자", email: "g5l0a@bp.hd.com", role: Role.MEMBER },
+
+    // 선행도장과
+    {
+      name: "천홍민",
+      email: "hongmincheon@hd.com",
+      role: Role.DIV_HEAD,
+      divisionKey: "선행도장과",
+    },
+    {
+      name: "주종일",
+      email: "jongil@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "선행도장과",
+    },
+    {
+      name: "정순욱",
+      email: "jsw704@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "선행도장과",
+    },
+    {
+      name: "성기업",
+      email: "sung0608@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "선행도장과",
+    },
+
+    // 안전운영과
+    {
+      name: "신경훈",
+      email: "ghshin@hd.com",
+      role: Role.DIV_HEAD,
+      divisionKey: "안전운영과",
+    },
+    {
+      name: "우남용",
+      email: "true21c@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "안전운영과",
+    },
+
+    // 설비과
+    {
+      name: "신성필",
+      email: "spshin@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "설비과",
+    },
+    {
+      name: "한성일",
+      email: "sihan@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "설비과",
+    },
+    {
+      name: "김대성",
+      email: "dae0179@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "설비과",
+    },
+    {
+      name: "김재민",
+      email: "kjmks33@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "설비과",
+    },
+
+    // 철목정도과
+    {
+      name: "허필훈",
+      email: "hph@hd.com",
+      role: Role.DIV_HEAD,
+      divisionKey: "철목정도과",
+    },
+    {
+      name: "이준석",
+      email: "junslee@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "철목정도과",
+    },
+    {
+      name: "김성득",
+      email: "ttyf99@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "철목정도과",
+    },
+
+    // 외업도장과
+    {
+      name: "김의탁",
+      email: "tech67@hd.com",
+      role: Role.DIV_HEAD,
+      divisionKey: "외업도장과",
+    },
+    {
+      name: "정성우",
+      email: "jsu3963@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "외업도장과",
+    },
+    {
+      name: "김재확",
+      email: "jaehwak@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "외업도장과",
+    },
+    {
+      name: "유중탁",
+      email: "yoot@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "외업도장과",
+    },
+
+    // 통합공정과
+    {
+      name: "황득곤",
+      email: "dghwang@hd.com",
+      role: Role.DIV_HEAD,
+      divisionKey: "통합공정과",
+    },
+    {
+      name: "김규남",
+      email: "gn.kim@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "통합공정과",
+    },
+    {
+      name: "김승용",
+      email: "honestk@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "통합공정과",
+    },
+    {
+      name: "송미정",
+      email: "mijungsong@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "통합공정과",
+    },
+    {
+      name: "윤지",
+      email: "yunj@hd.com",
+      role: Role.MEMBER,
+      divisionKey: "통합공정과",
+    },
+  ];
+
+  for (const person of staff) {
+    const divisionId = person.divisionKey
+      ? divisions[person.divisionKey].id
+      : null;
+    await prisma.user.upsert({
+      where: { email: person.email },
+      update: {
+        name: person.name,
+        role: person.role,
+        departmentId: dept.id,
+        divisionId,
+      },
+      create: {
+        name: person.name,
+        email: person.email,
+        passwordHash,
+        role: person.role,
+        departmentId: dept.id,
+        divisionId,
+      },
+    });
+  }
+
   // --- 카테고리 / 프로젝트(공사) ---
   const constructionCategory = await prisma.category.upsert({
     where: { name: "건조 프로젝트" },
@@ -311,8 +492,9 @@ async function main() {
     }
   }
 
-  console.log("Seed 완료. 로그인 계정 (비밀번호: password123):");
+  console.log("Seed 완료. 로그인 계정 (비밀번호: password123, 최초 로그인 후 /account 에서 변경 권장):");
   console.log("  admin@company.com (ADMIN)");
+  console.log(`  부서원 ${staff.length}명 (이메일을 로그인 아이디로 사용)`);
   console.log(
     `조직: ${dept.name} / 과 ${divisionNames.length}개, 프로젝트 ${
       Object.keys(projectDefs).length
