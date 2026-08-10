@@ -1,20 +1,39 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { canManageOrg } from "@/lib/org-access";
+import { ROLE_LABEL, canManageOrg } from "@/lib/org-access";
 import {
   createDepartment,
   createDivision,
   createTeam,
-  createUser,
+  deleteDepartment,
+  deleteDivision,
+  deleteTeam,
+  deleteUser,
 } from "@/actions/org";
+import { UserForm } from "@/components/user-form";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 
-const ROLE_OPTIONS = [
-  { value: "MEMBER", label: "팀원" },
-  { value: "TEAM_LEAD", label: "팀장" },
-  { value: "DIV_HEAD", label: "과장" },
-  { value: "DEPT_HEAD", label: "부서장" },
-  { value: "ADMIN", label: "관리자" },
-];
+function DeleteForm({
+  action,
+  id,
+  confirmMessage,
+}: {
+  action: (formData: FormData) => Promise<void>;
+  id: string;
+  confirmMessage: string;
+}) {
+  return (
+    <form action={action}>
+      <input type="hidden" name="id" value={id} />
+      <ConfirmSubmitButton
+        confirmMessage={confirmMessage}
+        className="text-xs text-red-500 hover:text-red-700"
+      >
+        삭제
+      </ConfirmSubmitButton>
+    </form>
+  );
+}
 
 export default async function OrgPage() {
   const session = await auth();
@@ -26,6 +45,8 @@ export default async function OrgPage() {
     );
   }
 
+  const currentUserId = session.user.id;
+
   const departments = await prisma.department.findMany({
     include: {
       divisions: {
@@ -33,6 +54,7 @@ export default async function OrgPage() {
           teams: { include: { users: true } },
           users: true,
         },
+        orderBy: { name: "asc" },
       },
       users: { where: { divisionId: null } },
     },
@@ -46,7 +68,8 @@ export default async function OrgPage() {
     <div className="mx-auto max-w-6xl px-6 py-8">
       <h1 className="text-xl font-semibold text-slate-900">조직 관리</h1>
       <p className="mt-1 text-sm text-slate-500">
-        부서 → 과 → 팀 → 개인 조직 구조를 관리합니다.
+        부서 → 과 → 팀 구조를 관리합니다. 과원(사무직)은 과에 소속되고, 팀(현장
+        작업팀)은 팀장만 개별 소속됩니다.
       </p>
 
       <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
@@ -54,43 +77,122 @@ export default async function OrgPage() {
         {departments.length === 0 ? (
           <p className="text-sm text-slate-400">등록된 부서가 없습니다.</p>
         ) : (
-          <ul className="flex flex-col gap-4">
+          <ul className="flex flex-col gap-5">
             {departments.map((dept) => (
               <li key={dept.id}>
-                <p className="text-sm font-medium text-slate-800">
-                  {dept.name}
-                </p>
-                <ul className="mt-2 ml-4 flex flex-col gap-2 border-l border-slate-100 pl-4">
+                <div className="flex items-center gap-3">
+                  <p className="text-sm font-medium text-slate-800">
+                    {dept.name}
+                  </p>
+                  <DeleteForm
+                    action={deleteDepartment}
+                    id={dept.id}
+                    confirmMessage={`"${dept.name}" 부서를 삭제하시겠습니까? 소속 과/팀도 함께 삭제됩니다.`}
+                  />
+                </div>
+
+                <ul className="mt-2 ml-4 flex flex-col gap-3 border-l border-slate-100 pl-4">
                   {dept.divisions.map((div) => (
                     <li key={div.id}>
-                      <p className="text-sm text-slate-700">{div.name}</p>
+                      <div className="flex items-center gap-3">
+                        <p className="text-sm text-slate-700">{div.name}</p>
+                        <DeleteForm
+                          action={deleteDivision}
+                          id={div.id}
+                          confirmMessage={`"${div.name}" 과를 삭제하시겠습니까? 소속 팀도 함께 삭제됩니다.`}
+                        />
+                      </div>
+
                       <ul className="mt-1 ml-4 flex flex-col gap-1 border-l border-slate-100 pl-4">
-                        {div.teams.map((team) => (
-                          <li key={team.id} className="text-xs text-slate-600">
-                            {team.name}
-                            {team.users.length > 0 && (
-                              <span className="ml-2 text-slate-400">
-                                (
-                                {team.users.map((u) => u.name).join(", ")}
-                                )
+                        {div.users
+                          .filter((u) => !u.teamId)
+                          .map((u) => (
+                            <li
+                              key={u.id}
+                              className="flex items-center gap-2 text-xs text-slate-600"
+                            >
+                              <span>
+                                {u.name} · {ROLE_LABEL[u.role]} (과원)
                               </span>
-                            )}
-                          </li>
-                        ))}
-                        {div.users.length > 0 && (
-                          <li className="text-xs text-slate-400">
-                            과 직속: {div.users.map((u) => u.name).join(", ")}
+                              {u.id !== currentUserId && (
+                                <DeleteForm
+                                  action={deleteUser}
+                                  id={u.id}
+                                  confirmMessage={`"${u.name}" 계정을 삭제하시겠습니까?`}
+                                />
+                              )}
+                            </li>
+                          ))}
+                        {div.users.filter((u) => !u.teamId).length === 0 && (
+                          <li className="text-xs text-slate-300">
+                            과원 없음
                           </li>
                         )}
+
+                        {div.teams.map((team) => (
+                          <li key={team.id}>
+                            <div className="flex items-center gap-2 text-xs text-slate-600">
+                              <span className="font-medium">
+                                [팀] {team.name}
+                              </span>
+                              <DeleteForm
+                                action={deleteTeam}
+                                id={team.id}
+                                confirmMessage={`"${team.name}" 팀을 삭제하시겠습니까?`}
+                              />
+                            </div>
+                            <ul className="mt-1 ml-4 flex flex-col gap-1">
+                              {team.users.map((u) => (
+                                <li
+                                  key={u.id}
+                                  className="flex items-center gap-2 text-xs text-slate-500"
+                                >
+                                  <span>
+                                    {u.name} · {ROLE_LABEL[u.role]}
+                                  </span>
+                                  {u.id !== currentUserId && (
+                                    <DeleteForm
+                                      action={deleteUser}
+                                      id={u.id}
+                                      confirmMessage={`"${u.name}" 계정을 삭제하시겠습니까?`}
+                                    />
+                                  )}
+                                </li>
+                              ))}
+                              {team.users.length === 0 && (
+                                <li className="text-xs text-slate-300">
+                                  팀장 미지정
+                                </li>
+                              )}
+                            </ul>
+                          </li>
+                        ))}
                       </ul>
                     </li>
                   ))}
-                  {dept.users.length > 0 && (
-                    <li className="text-xs text-slate-400">
-                      부서 직속: {dept.users.map((u) => u.name).join(", ")}
-                    </li>
-                  )}
                 </ul>
+
+                {dept.users.length > 0 && (
+                  <ul className="mt-2 ml-4 flex flex-col gap-1 border-l border-slate-100 pl-4">
+                    {dept.users.map((u) => (
+                      <li
+                        key={u.id}
+                        className="flex items-center gap-2 text-xs text-slate-400"
+                      >
+                        <span>
+                          {u.name} · {ROLE_LABEL[u.role]} (부서 직속)
+                        </span>
+                        {u.id !== currentUserId && (
+                          <DeleteForm
+                            action={deleteUser}
+                            id={u.id}
+                            confirmMessage={`"${u.name}" 계정을 삭제하시겠습니까?`}
+                          />
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>
@@ -157,7 +259,7 @@ export default async function OrgPage() {
           className="rounded-lg border border-slate-200 bg-white p-5"
         >
           <h3 className="mb-3 text-sm font-semibold text-slate-800">
-            팀 추가
+            팀(현장 작업팀) 추가
           </h3>
           <select
             name="divisionId"
@@ -185,84 +287,12 @@ export default async function OrgPage() {
           </button>
         </form>
 
-        <form
-          action={createUser}
-          className="rounded-lg border border-slate-200 bg-white p-5"
-        >
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
           <h3 className="mb-3 text-sm font-semibold text-slate-800">
             사용자 추가
           </h3>
-          <input
-            name="name"
-            required
-            placeholder="이름"
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-          <input
-            name="email"
-            type="email"
-            required
-            placeholder="이메일"
-            className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-          <input
-            name="password"
-            type="password"
-            required
-            placeholder="초기 비밀번호"
-            className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-          <select
-            name="role"
-            className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            defaultValue="MEMBER"
-          >
-            {ROLE_OPTIONS.map((r) => (
-              <option key={r.value} value={r.value}>
-                {r.label}
-              </option>
-            ))}
-          </select>
-          <select
-            name="departmentId"
-            className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">소속 부서 (선택)</option>
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-          <select
-            name="divisionId"
-            className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">소속 과 (선택)</option>
-            {divisions.map((div) => (
-              <option key={div.id} value={div.id}>
-                {div.name}
-              </option>
-            ))}
-          </select>
-          <select
-            name="teamId"
-            className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">소속 팀 (선택)</option>
-            {teams.map((team) => (
-              <option key={team.id} value={team.id}>
-                {team.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="submit"
-            className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            추가
-          </button>
-        </form>
+          <UserForm departments={departments} divisions={divisions} teams={teams} />
+        </div>
       </div>
     </div>
   );

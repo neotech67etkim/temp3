@@ -49,7 +49,9 @@ export async function createUser(formData: FormData) {
   const role = String(formData.get("role") ?? "MEMBER") as Role;
   const departmentId = (formData.get("departmentId") as string) || null;
   const divisionId = (formData.get("divisionId") as string) || null;
-  const teamId = (formData.get("teamId") as string) || null;
+  // 팀은 팀장(TEAM_LEAD)만 소속시킨다. 과원(MEMBER 등)은 과 단위까지만 소속된다.
+  const teamId =
+    role === "TEAM_LEAD" ? (formData.get("teamId") as string) || null : null;
 
   if (!email || !name || !password) {
     throw new Error("이메일, 이름, 비밀번호를 입력하세요.");
@@ -67,5 +69,48 @@ export async function createUser(formData: FormData) {
       teamId,
     },
   });
+  revalidatePath("/org");
+}
+
+export async function deleteDepartment(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id) throw new Error("잘못된 요청입니다.");
+  await prisma.department.delete({ where: { id } });
+  revalidatePath("/org");
+}
+
+export async function deleteDivision(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id) throw new Error("잘못된 요청입니다.");
+  await prisma.division.delete({ where: { id } });
+  revalidatePath("/org");
+}
+
+export async function deleteTeam(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id) throw new Error("잘못된 요청입니다.");
+  await prisma.team.delete({ where: { id } });
+  revalidatePath("/org");
+}
+
+export async function deleteUser(formData: FormData) {
+  const admin = await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id) throw new Error("잘못된 요청입니다.");
+  if (id === admin.id) throw new Error("본인 계정은 삭제할 수 없습니다.");
+
+  const createdCount = await prisma.workOrder.count({
+    where: { createdById: id },
+  });
+  if (createdCount > 0) {
+    throw new Error(
+      "이 사용자가 생성한 Work Order가 있어 삭제할 수 없습니다. 먼저 관련 업무를 다른 담당자에게 이관하세요.",
+    );
+  }
+
+  await prisma.user.delete({ where: { id } });
   revalidatePath("/org");
 }

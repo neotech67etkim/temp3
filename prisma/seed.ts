@@ -106,7 +106,6 @@ async function main() {
       passwordHash,
       departmentId: devDept.id,
       divisionId: platformDiv.id,
-      teamId: backendTeam.id,
     },
   });
 

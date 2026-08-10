@@ -83,11 +83,11 @@ model User {
   updatedAt    DateTime @updatedAt
 
   departmentId String?
-  department   Department? @relation(fields: [departmentId], references: [id])
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   divisionId   String?
-  division     Division?   @relation(fields: [divisionId], references: [id])
+  division     Division?   @relation(fields: [divisionId], references: [id], onDelete: SetNull)
   teamId       String?
-  team         Team?       @relation(fields: [teamId], references: [id])
+  team         Team?       @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
   assignedWorkOrders WorkOrder[] @relation("UserAssignments")
   createdWorkOrders  WorkOrder[] @relation("CreatedBy")
@@ -134,13 +134,13 @@ model WorkOrder {
   assigneeType AssigneeType
 
   assignedDeptId String?
-  assignedDept   Department? @relation("DeptAssignments", fields: [assignedDeptId], references: [id])
+  assignedDept   Department? @relation("DeptAssignments", fields: [assignedDeptId], references: [id], onDelete: SetNull)
   assignedDivId  String?
-  assignedDiv    Division?   @relation("DivAssignments", fields: [assignedDivId], references: [id])
+  assignedDiv    Division?   @relation("DivAssignments", fields: [assignedDivId], references: [id], onDelete: SetNull)
   assignedTeamId String?
-  assignedTeam   Team?       @relation("TeamAssignments", fields: [assignedTeamId], references: [id])
+  assignedTeam   Team?       @relation("TeamAssignments", fields: [assignedTeamId], references: [id], onDelete: SetNull)
   assignedUserId String?
-  assignedUser   User?       @relation("UserAssignments", fields: [assignedUserId], references: [id])
+  assignedUser   User?       @relation("UserAssignments", fields: [assignedUserId], references: [id], onDelete: SetNull)
 
   status   WorkOrderStatus @default(NOT_STARTED)
   progress Int             @default(0)

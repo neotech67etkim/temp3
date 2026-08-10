@@ -1,14 +1,6 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
-import { canManageOrg } from "@/lib/org-access";
-
-const ROLE_LABEL: Record<string, string> = {
-  ADMIN: "관리자",
-  DEPT_HEAD: "부서장",
-  DIV_HEAD: "과장",
-  TEAM_LEAD: "팀장",
-  MEMBER: "팀원",
-};
+import { ROLE_LABEL, canManageOrg } from "@/lib/org-access";
 
 export async function Nav() {
   const session = await auth();
@@ -22,6 +14,7 @@ export async function Nav() {
     ...(canManageOrg(session.user.role)
       ? [{ href: "/org", label: "조직 관리" }]
       : []),
+    { href: "/account", label: "내 계정" },
   ];
 
   return (
