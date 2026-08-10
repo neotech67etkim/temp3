@@ -1,0 +1,161 @@
+// Work Order 관리 웹앱 스키마
+// 조직 계층: Department(부서) -> Division(과) -> Team(팀) -> User(개인)
+// 업무 계층: Category(카테고리) -> Project(공통 프로젝트) -> WorkOrder(업무지시, 자기참조 트리)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  DEPT_HEAD
+  DIV_HEAD
+  TEAM_LEAD
+  MEMBER
+}
+
+enum AssigneeType {
+  DEPARTMENT
+  DIVISION
+  TEAM
+  USER
+}
+
+enum WorkOrderStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+model Department {
+  id         String      @id @default(cuid())
+  name       String      @unique
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  divisions  Division[]
+  users      User[]
+  workOrders WorkOrder[] @relation("DeptAssignments")
+}
+
+model Division {
+  id           String      @id @default(cuid())
+  name         String
+  departmentId String
+  department   Department  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  teams        Team[]
+  users        User[]
+  workOrders   WorkOrder[] @relation("DivAssignments")
+
+  @@unique([departmentId, name])
+  @@index([departmentId])
+}
+
+model Team {
+  id         String      @id @default(cuid())
+  name       String
+  divisionId String
+  division   Division    @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  users      User[]
+  workOrders WorkOrder[] @relation("TeamAssignments")
+
+  @@unique([divisionId, name])
+  @@index([divisionId])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(MEMBER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  divisionId   String?
+  division     Division?   @relation(fields: [divisionId], references: [id])
+  teamId       String?
+  team         Team?       @relation(fields: [teamId], references: [id])
+
+  assignedWorkOrders WorkOrder[] @relation("UserAssignments")
+  createdWorkOrders  WorkOrder[] @relation("CreatedBy")
+
+  @@index([departmentId])
+  @@index([divisionId])
+  @@index([teamId])
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  color     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  projects  Project[]
+}
+
+model Project {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  categoryId  String?
+  category    Category?   @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  workOrders  WorkOrder[]
+
+  @@index([categoryId])
+}
+
+model WorkOrder {
+  id          String  @id @default(cuid())
+  title       String
+  description String?
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  parentId String?
+  parent   WorkOrder?  @relation("WOHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children WorkOrder[] @relation("WOHierarchy")
+
+  assigneeType AssigneeType
+
+  assignedDeptId String?
+  assignedDept   Department? @relation("DeptAssignments", fields: [assignedDeptId], references: [id])
+  assignedDivId  String?
+  assignedDiv    Division?   @relation("DivAssignments", fields: [assignedDivId], references: [id])
+  assignedTeamId String?
+  assignedTeam   Team?       @relation("TeamAssignments", fields: [assignedTeamId], references: [id])
+  assignedUserId String?
+  assignedUser   User?       @relation("UserAssignments", fields: [assignedUserId], references: [id])
+
+  status   WorkOrderStatus @default(NOT_STARTED)
+  progress Int             @default(0)
+  dueDate  DateTime?
+
+  createdById String
+  createdBy   User   @relation("CreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([parentId])
+  @@index([assignedDeptId])
+  @@index([assignedDivId])
+  @@index([assignedTeamId])
+  @@index([assignedUserId])
+}
