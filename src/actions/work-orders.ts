@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { AssigneeType, WorkOrderStatus } from "@prisma/client";
+import { AssigneeType, Priority, WorkOrderStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { auth } from "@/auth";
 import { canManageWorkOrders } from "@/lib/org-access";
@@ -33,6 +33,7 @@ export async function createWorkOrder(formData: FormData) {
   const assigneeId = String(formData.get("assigneeId") ?? "");
   const dueDateRaw = formData.get("dueDate") as string | null;
   const dueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+  const priority = (formData.get("priority") as Priority) || Priority.NORMAL;
 
   if (!title || !projectId || !assigneeType || !assigneeId) {
     throw new Error("제목, 프로젝트, 할당 대상을 모두 입력하세요.");
@@ -46,6 +47,7 @@ export async function createWorkOrder(formData: FormData) {
       parentId,
       assigneeType,
       dueDate,
+      priority,
       createdById: user.id,
       [ASSIGNEE_FIELD[assigneeType]]: assigneeId,
     },
@@ -100,6 +102,61 @@ export async function updateWorkOrderProgress(id: string, formData: FormData) {
   revalidatePath(`/projects/${workOrder.projectId}`);
   revalidatePath("/dashboard");
   revalidatePath("/my-tasks");
+}
+
+export async function updateWorkOrderPriority(id: string, formData: FormData) {
+  const session = await auth();
+  if (!session?.user) throw new Error("로그인이 필요합니다.");
+
+  const priority = formData.get("priority") as Priority;
+
+  const workOrder = await prisma.workOrder.update({
+    where: { id },
+    data: { priority },
+  });
+
+  revalidatePath("/work-orders");
+  revalidatePath(`/work-orders/${id}`);
+  revalidatePath(`/projects/${workOrder.projectId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/my-tasks");
+}
+
+export async function updateWorkOrderDetails(id: string, formData: FormData) {
+  await requireManager();
+
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim() || null;
+  const dueDateRaw = formData.get("dueDate") as string | null;
+  const dueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+
+  if (!title) throw new Error("제목을 입력하세요.");
+
+  const workOrder = await prisma.workOrder.update({
+    where: { id },
+    data: { title, description, dueDate },
+  });
+
+  revalidatePath("/work-orders");
+  revalidatePath(`/work-orders/${id}`);
+  revalidatePath(`/projects/${workOrder.projectId}`);
+  revalidatePath("/dashboard");
+}
+
+export async function deleteWorkOrder(formData: FormData) {
+  await requireManager();
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) throw new Error("잘못된 요청입니다.");
+
+  const workOrder = await prisma.workOrder.delete({ where: { id } });
+
+  revalidatePath("/work-orders");
+  revalidatePath("/dashboard");
+  revalidatePath("/my-tasks");
+  revalidatePath(`/projects/${workOrder.projectId}`);
+  if (workOrder.parentId) revalidatePath(`/work-orders/${workOrder.parentId}`);
+  redirect(`/projects/${workOrder.projectId}`);
 }
 
 export async function createProject(formData: FormData) {

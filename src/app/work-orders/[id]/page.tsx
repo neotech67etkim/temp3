@@ -5,10 +5,15 @@ import { prisma } from "@/lib/db";
 import { computeProgress } from "@/lib/progress";
 import { canManageWorkOrders } from "@/lib/org-access";
 import { formatAssignee } from "@/lib/format";
+import { deleteWorkOrder } from "@/actions/work-orders";
 import { StatusBadge } from "@/components/status-badge";
+import { PriorityBadge } from "@/components/priority-badge";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusEditor } from "@/components/status-editor";
+import { PriorityEditor } from "@/components/priority-editor";
 import { ProgressEditor } from "@/components/progress-editor";
+import { WorkOrderEditForm } from "@/components/work-order-edit-form";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 
 export default async function WorkOrderDetailPage({
   params,
@@ -78,13 +83,40 @@ export default async function WorkOrderDetailPage({
             {workOrder.title}
           </h1>
           {workOrder.description && (
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm whitespace-pre-line text-slate-500">
               {workOrder.description}
             </p>
           )}
         </div>
-        <StatusBadge status={workOrder.status} />
+        <div className="flex shrink-0 items-center gap-2">
+          <PriorityBadge priority={workOrder.priority} />
+          <StatusBadge status={workOrder.status} />
+        </div>
       </div>
+
+      {canManage && (
+        <div className="mt-3 flex items-center gap-3">
+          <WorkOrderEditForm
+            id={workOrder.id}
+            title={workOrder.title}
+            description={workOrder.description}
+            dueDate={
+              workOrder.dueDate
+                ? workOrder.dueDate.toISOString().slice(0, 10)
+                : null
+            }
+          />
+          <form action={deleteWorkOrder}>
+            <input type="hidden" name="id" value={workOrder.id} />
+            <ConfirmSubmitButton
+              confirmMessage={`"${workOrder.title}" 업무를 삭제하시겠습니까? 하위 업무도 함께 삭제됩니다.`}
+              className="text-xs text-red-500 hover:text-red-700"
+            >
+              삭제
+            </ConfirmSubmitButton>
+          </form>
+        </div>
+      )}
 
       <dl className="mt-6 grid grid-cols-2 gap-4 rounded-lg border border-slate-200 bg-white p-5 text-sm">
         <div>
@@ -118,6 +150,12 @@ export default async function WorkOrderDetailPage({
               상태 변경
             </p>
             <StatusEditor id={workOrder.id} status={workOrder.status} />
+          </div>
+          <div>
+            <p className="mb-1 text-xs font-medium text-slate-500">
+              우선순위 변경
+            </p>
+            <PriorityEditor id={workOrder.id} priority={workOrder.priority} />
           </div>
           {!hasChildren && (
             <div>
@@ -163,6 +201,7 @@ export default async function WorkOrderDetailPage({
                   {child.title}
                 </Link>
                 <StatusBadge status={child.status} />
+                <PriorityBadge priority={child.priority} />
                 <span className="text-xs text-slate-400">
                   {formatAssignee(child)}
                 </span>

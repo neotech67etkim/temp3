@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { canManageWorkOrders, workOrderScopeWhere } from "@/lib/org-access";
 import { formatAssignee } from "@/lib/format";
 import { StatusBadge } from "@/components/status-badge";
+import { PriorityBadge } from "@/components/priority-badge";
 import { ProgressBar } from "@/components/progress-bar";
 
 export default async function WorkOrdersPage() {
@@ -21,7 +22,7 @@ export default async function WorkOrdersPage() {
       assignedTeam: { select: { name: true } },
       assignedUser: { select: { name: true } },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
     take: 100,
   });
 
@@ -66,6 +67,7 @@ export default async function WorkOrdersPage() {
                   {wo.project.name}
                 </span>
                 <StatusBadge status={wo.status} />
+                <PriorityBadge priority={wo.priority} />
                 <span className="text-xs text-slate-400">
                   {formatAssignee(wo)}
                 </span>

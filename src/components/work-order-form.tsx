@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createWorkOrder } from "@/actions/work-orders";
+import { PRIORITY_LABEL } from "@/components/priority-badge";
 
 type Option = { id: string; name: string };
 
@@ -94,6 +95,23 @@ export function WorkOrderForm({
           type="date"
           className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">
+          우선순위
+        </label>
+        <select
+          name="priority"
+          defaultValue="NORMAL"
+          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        >
+          {Object.entries(PRIORITY_LABEL).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div>

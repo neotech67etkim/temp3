@@ -34,6 +34,13 @@ enum WorkOrderStatus {
   CANCELLED
 }
 
+enum Priority {
+  URGENT
+  HIGH
+  NORMAL
+  LOW
+}
+
 model Department {
   id         String      @id @default(cuid())
   name       String      @unique
@@ -143,6 +150,7 @@ model WorkOrder {
   assignedUser   User?       @relation("UserAssignments", fields: [assignedUserId], references: [id], onDelete: SetNull)
 
   status   WorkOrderStatus @default(NOT_STARTED)
+  priority Priority        @default(NORMAL)
   progress Int             @default(0)
   dueDate  DateTime?
 

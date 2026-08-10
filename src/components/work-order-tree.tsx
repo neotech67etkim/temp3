@@ -1,14 +1,16 @@
 import Link from "next/link";
-import type { WorkOrderStatus } from "@prisma/client";
+import type { Priority, WorkOrderStatus } from "@prisma/client";
 import type { TreeNode } from "@/lib/progress";
 import { formatAssignee, type AssigneeInfo } from "@/lib/format";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusBadge } from "@/components/status-badge";
+import { PriorityBadge } from "@/components/priority-badge";
 
 export type WorkOrderTreeItem = AssigneeInfo & {
   id: string;
   title: string;
   status: WorkOrderStatus;
+  priority: Priority;
 };
 
 export function WorkOrderTree({
@@ -40,6 +42,7 @@ export function WorkOrderTree({
               {node.title}
             </Link>
             <StatusBadge status={node.status} />
+            <PriorityBadge priority={node.priority} />
             <span className="text-xs text-slate-400">
               {formatAssignee(node)}
             </span>
