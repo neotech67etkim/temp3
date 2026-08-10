@@ -5,6 +5,7 @@ import { canManageWorkOrders, workOrderScopeWhere } from "@/lib/org-access";
 import { formatAssignee } from "@/lib/format";
 import { StatusBadge } from "@/components/status-badge";
 import { PriorityBadge } from "@/components/priority-badge";
+import { DelayBadge } from "@/components/delay-badge";
 import { ProgressBar } from "@/components/progress-bar";
 
 export default async function WorkOrdersPage() {
@@ -21,6 +22,7 @@ export default async function WorkOrdersPage() {
       assignedDiv: { select: { name: true } },
       assignedTeam: { select: { name: true } },
       assignedUser: { select: { name: true } },
+      createdBy: { select: { name: true } },
     },
     orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
     take: 100,
@@ -68,8 +70,13 @@ export default async function WorkOrdersPage() {
                 </span>
                 <StatusBadge status={wo.status} />
                 <PriorityBadge priority={wo.priority} />
+                <DelayBadge
+                  dueDate={wo.dueDate}
+                  status={wo.status}
+                  completedAt={wo.completedAt}
+                />
                 <span className="text-xs text-slate-400">
-                  {formatAssignee(wo)}
+                  {wo.createdBy.name} → {formatAssignee(wo)}
                 </span>
                 <div className="w-36">
                   <ProgressBar value={wo.progress} />

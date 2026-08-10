@@ -2,10 +2,21 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { AssigneeType, Priority, WorkOrderStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { auth } from "@/auth";
 import { canManageWorkOrders } from "@/lib/org-access";
+
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+]);
 
 async function requireManager() {
   const session = await auth();
@@ -69,7 +80,10 @@ export async function updateWorkOrderStatus(id: string, formData: FormData) {
 
   const workOrder = await prisma.workOrder.update({
     where: { id },
-    data: { status },
+    data: {
+      status,
+      completedAt: status === WorkOrderStatus.COMPLETED ? new Date() : null,
+    },
   });
 
   revalidatePath("/work-orders");
@@ -94,7 +108,11 @@ export async function updateWorkOrderProgress(id: string, formData: FormData) {
 
   const workOrder = await prisma.workOrder.update({
     where: { id },
-    data: { progress: clamped, status },
+    data: {
+      progress: clamped,
+      status,
+      completedAt: status === WorkOrderStatus.COMPLETED ? new Date() : null,
+    },
   });
 
   revalidatePath("/work-orders");
@@ -102,6 +120,55 @@ export async function updateWorkOrderProgress(id: string, formData: FormData) {
   revalidatePath(`/projects/${workOrder.projectId}`);
   revalidatePath("/dashboard");
   revalidatePath("/my-tasks");
+}
+
+/** 담당자가 진행 경과(텍스트/스크린샷/참고 파일 경로)를 남긴다. */
+export async function addWorkOrderLog(workOrderId: string, formData: FormData) {
+  const session = await auth();
+  if (!session?.user) throw new Error("로그인이 필요합니다.");
+
+  const note = String(formData.get("note") ?? "").trim();
+  const filePath = String(formData.get("filePath") ?? "").trim() || null;
+  const image = formData.get("image");
+
+  let imagePath: string | null = null;
+  if (image instanceof File && image.size > 0) {
+    if (image.size > MAX_IMAGE_BYTES) {
+      throw new Error("이미지 용량은 8MB 이하만 첨부할 수 있습니다.");
+    }
+    if (!ALLOWED_IMAGE_TYPES.has(image.type)) {
+      throw new Error("이미지 파일(PNG/JPEG/WEBP/GIF)만 첨부할 수 있습니다.");
+    }
+    const ext = path.extname(image.name) || ".png";
+    const filename = `${randomUUID()}${ext}`;
+    const dir = path.join(process.cwd(), "public", "uploads", "work-orders", workOrderId);
+    await mkdir(dir, { recursive: true });
+    const buffer = Buffer.from(await image.arrayBuffer());
+    await writeFile(path.join(dir, filename), buffer);
+    imagePath = `/uploads/work-orders/${workOrderId}/${filename}`;
+  }
+
+  if (!note && !filePath && !imagePath) {
+    throw new Error("진행 내용을 입력하거나 스크린샷/파일 경로를 첨부하세요.");
+  }
+
+  const workOrder = await prisma.workOrder.findUniqueOrThrow({
+    where: { id: workOrderId },
+    select: { progress: true },
+  });
+
+  await prisma.workOrderLog.create({
+    data: {
+      workOrderId,
+      authorId: session.user.id,
+      note: note || null,
+      filePath,
+      imagePath,
+      progress: workOrder.progress,
+    },
+  });
+
+  revalidatePath(`/work-orders/${workOrderId}`);
 }
 
 export async function updateWorkOrderPriority(id: string, formData: FormData) {

@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { StatusBadge } from "@/components/status-badge";
 import { PriorityBadge } from "@/components/priority-badge";
+import { DelayBadge } from "@/components/delay-badge";
 import { StatusEditor } from "@/components/status-editor";
 import { ProgressEditor } from "@/components/progress-editor";
 
@@ -12,7 +13,10 @@ export default async function MyTasksPage() {
 
   const workOrders = await prisma.workOrder.findMany({
     where: { assignedUserId: session.user.id },
-    include: { project: { select: { name: true } } },
+    include: {
+      project: { select: { name: true } },
+      createdBy: { select: { name: true } },
+    },
     orderBy: [{ priority: "asc" }, { status: "asc" }, { dueDate: "asc" }],
   });
 
@@ -41,7 +45,7 @@ export default async function MyTasksPage() {
                     {wo.title}
                   </Link>
                   <p className="mt-1 text-xs text-slate-400">
-                    {wo.project.name}
+                    지시: {wo.createdBy.name} · {wo.project.name}
                     {wo.dueDate &&
                       ` · 마감 ${wo.dueDate.toLocaleDateString("ko-KR")}`}
                   </p>
@@ -49,6 +53,11 @@ export default async function MyTasksPage() {
                 <div className="flex shrink-0 items-center gap-2">
                   <PriorityBadge priority={wo.priority} />
                   <StatusBadge status={wo.status} />
+                  <DelayBadge
+                    dueDate={wo.dueDate}
+                    status={wo.status}
+                    completedAt={wo.completedAt}
+                  />
                 </div>
               </div>
 

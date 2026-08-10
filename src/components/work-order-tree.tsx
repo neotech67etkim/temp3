@@ -5,12 +5,16 @@ import { formatAssignee, type AssigneeInfo } from "@/lib/format";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusBadge } from "@/components/status-badge";
 import { PriorityBadge } from "@/components/priority-badge";
+import { DelayBadge } from "@/components/delay-badge";
 
 export type WorkOrderTreeItem = AssigneeInfo & {
   id: string;
   title: string;
   status: WorkOrderStatus;
   priority: Priority;
+  dueDate: Date | null;
+  completedAt: Date | null;
+  createdBy: { name: string };
 };
 
 export function WorkOrderTree({
@@ -43,8 +47,13 @@ export function WorkOrderTree({
             </Link>
             <StatusBadge status={node.status} />
             <PriorityBadge priority={node.priority} />
+            <DelayBadge
+              dueDate={node.dueDate}
+              status={node.status}
+              completedAt={node.completedAt}
+            />
             <span className="text-xs text-slate-400">
-              {formatAssignee(node)}
+              {node.createdBy.name} → {formatAssignee(node)}
             </span>
             <div className="w-40">
               <ProgressBar value={progressMap.get(node.id) ?? 0} />

@@ -46,3 +46,4 @@ next-env.d.ts
 /prisma/dev.db-journal
 /data/
 /uploads/
+/public/uploads/

@@ -25,6 +25,7 @@ export default async function ProjectDetailPage({
           assignedDiv: { select: { name: true } },
           assignedTeam: { select: { name: true } },
           assignedUser: { select: { name: true } },
+          createdBy: { select: { name: true } },
         },
         orderBy: { createdAt: "asc" },
       },

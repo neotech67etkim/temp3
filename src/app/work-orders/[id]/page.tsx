@@ -8,12 +8,15 @@ import { formatAssignee } from "@/lib/format";
 import { deleteWorkOrder } from "@/actions/work-orders";
 import { StatusBadge } from "@/components/status-badge";
 import { PriorityBadge } from "@/components/priority-badge";
+import { DelayBadge } from "@/components/delay-badge";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusEditor } from "@/components/status-editor";
 import { PriorityEditor } from "@/components/priority-editor";
 import { ProgressEditor } from "@/components/progress-editor";
 import { WorkOrderEditForm } from "@/components/work-order-edit-form";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { WorkOrderLogForm } from "@/components/work-order-log-form";
+import { WorkOrderLogList } from "@/components/work-order-log-list";
 
 export default async function WorkOrderDetailPage({
   params,
@@ -42,6 +45,10 @@ export default async function WorkOrderDetailPage({
       assignedTeam: { select: { name: true } },
       assignedUser: { select: { name: true } },
       createdBy: { select: { name: true } },
+      logs: {
+        include: { author: { select: { name: true } } },
+        orderBy: { createdAt: "desc" },
+      },
     },
   });
 
@@ -91,6 +98,11 @@ export default async function WorkOrderDetailPage({
         <div className="flex shrink-0 items-center gap-2">
           <PriorityBadge priority={workOrder.priority} />
           <StatusBadge status={workOrder.status} />
+          <DelayBadge
+            dueDate={workOrder.dueDate}
+            status={workOrder.status}
+            completedAt={workOrder.completedAt}
+          />
         </div>
       </div>
 
@@ -120,15 +132,19 @@ export default async function WorkOrderDetailPage({
 
       <dl className="mt-6 grid grid-cols-2 gap-4 rounded-lg border border-slate-200 bg-white p-5 text-sm">
         <div>
-          <dt className="text-xs text-slate-400">할당 대상</dt>
-          <dd className="mt-1 text-slate-700">{formatAssignee(workOrder)}</dd>
+          <dt className="text-xs text-slate-400">지시자 → 담당</dt>
+          <dd className="mt-1 text-slate-700">
+            {workOrder.createdBy.name} → {formatAssignee(workOrder)}
+          </dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-400">생성자</dt>
-          <dd className="mt-1 text-slate-700">{workOrder.createdBy.name}</dd>
+          <dt className="text-xs text-slate-400">진행률 (누적)</dt>
+          <dd className="mt-1">
+            <ProgressBar value={rollupProgress} />
+          </dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-400">마감일</dt>
+          <dt className="text-xs text-slate-400">지시한 완료일정</dt>
           <dd className="mt-1 text-slate-700">
             {workOrder.dueDate
               ? workOrder.dueDate.toLocaleDateString("ko-KR")
@@ -136,9 +152,11 @@ export default async function WorkOrderDetailPage({
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-400">진행률 (누적)</dt>
-          <dd className="mt-1">
-            <ProgressBar value={rollupProgress} />
+          <dt className="text-xs text-slate-400">실제 완료일정</dt>
+          <dd className="mt-1 text-slate-700">
+            {workOrder.completedAt
+              ? workOrder.completedAt.toLocaleDateString("ko-KR")
+              : "-"}
           </dd>
         </div>
       </dl>
@@ -202,6 +220,11 @@ export default async function WorkOrderDetailPage({
                 </Link>
                 <StatusBadge status={child.status} />
                 <PriorityBadge priority={child.priority} />
+                <DelayBadge
+                  dueDate={child.dueDate}
+                  status={child.status}
+                  completedAt={child.completedAt}
+                />
                 <span className="text-xs text-slate-400">
                   {formatAssignee(child)}
                 </span>
@@ -212,6 +235,18 @@ export default async function WorkOrderDetailPage({
             ))}
           </ul>
         )}
+      </div>
+
+      <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
+        <h2 className="mb-4 text-sm font-semibold text-slate-800">
+          진행 경과
+        </h2>
+        {(canManage || isAssignedToMe) && (
+          <div className="mb-6 border-b border-slate-100 pb-6">
+            <WorkOrderLogForm workOrderId={workOrder.id} />
+          </div>
+        )}
+        <WorkOrderLogList logs={workOrder.logs} />
       </div>
     </div>
   );

@@ -98,6 +98,7 @@ model User {
 
   assignedWorkOrders WorkOrder[] @relation("UserAssignments")
   createdWorkOrders  WorkOrder[] @relation("CreatedBy")
+  workOrderLogs      WorkOrderLog[]
 
   @@index([departmentId])
   @@index([divisionId])
@@ -152,10 +153,13 @@ model WorkOrder {
   status   WorkOrderStatus @default(NOT_STARTED)
   priority Priority        @default(NORMAL)
   progress Int             @default(0)
-  dueDate  DateTime?
+  dueDate     DateTime?
+  completedAt DateTime?
 
   createdById String
   createdBy   User   @relation("CreatedBy", fields: [createdById], references: [id])
+
+  logs WorkOrderLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -166,4 +170,23 @@ model WorkOrder {
   @@index([assignedDivId])
   @@index([assignedTeamId])
   @@index([assignedUserId])
+}
+
+/** 담당자가 남기는 진행 경과 기록 (텍스트, 스크린샷, 참고 파일 경로) */
+model WorkOrderLog {
+  id          String    @id @default(cuid())
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  note     String?
+  progress Int?
+  imagePath String?
+  filePath  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([workOrderId])
 }
