@@ -289,6 +289,21 @@ export async function reassignWorkOrder(id: string, formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+async function collectDescendantIds(rootId: string): Promise<string[]> {
+  const ids: string[] = [];
+  let frontier = [rootId];
+  while (frontier.length > 0) {
+    const children = await prisma.workOrder.findMany({
+      where: { parentId: { in: frontier } },
+      select: { id: true },
+    });
+    const childIds = children.map((c) => c.id);
+    ids.push(...childIds);
+    frontier = childIds;
+  }
+  return ids;
+}
+
 export async function updateWorkOrderDetails(id: string, formData: FormData) {
   await requireManager();
 
@@ -296,18 +311,48 @@ export async function updateWorkOrderDetails(id: string, formData: FormData) {
   const description = String(formData.get("description") ?? "").trim() || null;
   const dueDateRaw = formData.get("dueDate") as string | null;
   const dueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+  const projectId = String(formData.get("projectId") ?? "");
 
   if (!title) throw new Error("제목을 입력하세요.");
+  if (!projectId) throw new Error("프로젝트를 선택하세요.");
 
-  const workOrder = await prisma.workOrder.update({
+  const current = await prisma.workOrder.findUniqueOrThrow({
     where: { id },
-    data: { title, description, dueDate },
+    select: { projectId: true, parentId: true },
+  });
+  const projectChanged = projectId !== current.projectId;
+  const descendantIds = projectChanged ? await collectDescendantIds(id) : [];
+
+  const workOrder = await prisma.$transaction(async (tx) => {
+    const updated = await tx.workOrder.update({
+      where: { id },
+      data: {
+        title,
+        description,
+        dueDate,
+        projectId,
+        // 프로젝트가 바뀌면 기존 상위 업무와 프로젝트가 어긋나므로 상위 연결을 해제한다.
+        parentId: projectChanged ? null : undefined,
+      },
+    });
+    if (descendantIds.length > 0) {
+      await tx.workOrder.updateMany({
+        where: { id: { in: descendantIds } },
+        data: { projectId },
+      });
+    }
+    return updated;
   });
 
   revalidatePath("/work-orders");
   revalidatePath(`/work-orders/${id}`);
   revalidatePath(`/projects/${workOrder.projectId}`);
+  if (projectChanged) {
+    revalidatePath(`/projects/${current.projectId}`);
+    if (current.parentId) revalidatePath(`/work-orders/${current.parentId}`);
+  }
   revalidatePath("/dashboard");
+  revalidatePath("/work-list");
 }
 
 export async function deleteWorkOrder(formData: FormData) {

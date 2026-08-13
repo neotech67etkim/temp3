@@ -76,6 +76,10 @@ export default async function WorkOrderDetailPage({
         })
       : [];
 
+  const projects = canManage
+    ? await prisma.project.findMany({ orderBy: { name: "asc" } })
+    : [];
+
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
       <BackToDashboard />
@@ -130,6 +134,8 @@ export default async function WorkOrderDetailPage({
                 ? workOrder.dueDate.toISOString().slice(0, 10)
                 : null
             }
+            projectId={workOrder.projectId}
+            projects={projects}
           />
           <form action={deleteWorkOrder}>
             <input type="hidden" name="id" value={workOrder.id} />

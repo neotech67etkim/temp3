@@ -3,16 +3,22 @@
 import { useState } from "react";
 import { updateWorkOrderDetails } from "@/actions/work-orders";
 
+type Option = { id: string; name: string };
+
 export function WorkOrderEditForm({
   id,
   title,
   description,
   dueDate,
+  projectId,
+  projects,
 }: {
   id: string;
   title: string;
   description: string | null;
   dueDate: string | null;
+  projectId: string;
+  projects: Option[];
 }) {
   const [open, setOpen] = useState(false);
   const action = updateWorkOrderDetails.bind(null, id);
@@ -49,6 +55,18 @@ export function WorkOrderEditForm({
         placeholder="업무내용 및 참고사항"
         className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
       />
+      <select
+        name="projectId"
+        defaultValue={projectId}
+        required
+        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+      >
+        {projects.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
       <input
         name="dueDate"
         type="date"

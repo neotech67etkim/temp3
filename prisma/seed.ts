@@ -314,7 +314,7 @@ async function main() {
     },
     {
       divisionKey: "설비과",
-      projectKey: "OPS",
+      projectKey: "RUYA",
       title: "Contraflame 공정 만회 대책",
       priority: Priority.URGENT,
       children: [
