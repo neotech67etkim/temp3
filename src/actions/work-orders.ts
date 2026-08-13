@@ -253,15 +253,35 @@ export async function reassignWorkOrder(id: string, formData: FormData) {
 
   const workOrder = await prisma.workOrder.findFirst({
     where: { id, ...workOrderScopeWhere(session.user) },
-    include: { assignedUser: { select: { name: true } } },
+    include: {
+      assignedUser: { select: { name: true } },
+      assignedDept: { select: { name: true } },
+      assignedDiv: { select: { name: true } },
+    },
   });
   if (!workOrder) throw new Error("이관 권한이 없는 업무입니다.");
 
-  if (workOrder.assigneeType !== AssigneeType.USER) {
-    throw new Error("개인에게 할당된 업무만 이관할 수 있습니다.");
+  const ownsOrgAssignment =
+    session.user.role === "ADMIN" ||
+    (workOrder.assigneeType === AssigneeType.DEPARTMENT &&
+      session.user.role === "DEPT_HEAD" &&
+      workOrder.assignedDeptId === session.user.departmentId) ||
+    (workOrder.assigneeType === AssigneeType.DIVISION &&
+      session.user.role === "DIV_HEAD" &&
+      workOrder.assignedDivId === session.user.divisionId);
+
+  if (workOrder.assigneeType !== AssigneeType.USER && !ownsOrgAssignment) {
+    throw new Error(
+      "본인이 담당하는 조직 단위로 할당된 업무이거나 개인에게 할당된 업무만 지정/이관할 수 있습니다.",
+    );
   }
 
-  if (newAssigneeId === workOrder.assignedUserId) return;
+  if (
+    workOrder.assigneeType === AssigneeType.USER &&
+    newAssigneeId === workOrder.assignedUserId
+  ) {
+    return;
+  }
 
   const target = await prisma.user.findFirst({
     where: { id: newAssigneeId, ...assignableUsersWhere(session.user) },
@@ -269,16 +289,29 @@ export async function reassignWorkOrder(id: string, formData: FormData) {
   });
   if (!target) throw new Error("이관 권한이 없는 대상입니다.");
 
+  const fromLabel =
+    workOrder.assignedUser?.name ??
+    workOrder.assignedDiv?.name ??
+    workOrder.assignedDept?.name ??
+    "미지정";
+
   await prisma.$transaction([
     prisma.workOrder.update({
       where: { id },
-      data: { assignedUserId: target.id, transferred: true },
+      data: {
+        assigneeType: AssigneeType.USER,
+        assignedUserId: target.id,
+        assignedDeptId: null,
+        assignedDivId: null,
+        assignedTeamId: null,
+        transferred: true,
+      },
     }),
     prisma.workOrderLog.create({
       data: {
         workOrderId: id,
         authorId: session.user.id,
-        note: `담당자를 ${workOrder.assignedUser?.name ?? "미지정"}님에서 ${target.name}님으로 이관했습니다.`,
+        note: `담당자를 ${fromLabel}에서 ${target.name}님으로 지정/이관했습니다.`,
       },
     }),
   ]);

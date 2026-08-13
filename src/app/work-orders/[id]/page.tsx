@@ -68,13 +68,23 @@ export default async function WorkOrderDetailPage({
   const isAssignedToMe = workOrder.assignedUserId === session.user.id;
   const hasChildren = workOrder.children.length > 0;
 
-  const transferCandidates =
-    canManage && workOrder.assigneeType === "USER"
-      ? await prisma.user.findMany({
-          where: assignableUsersWhere(session.user),
-          orderBy: { name: "asc" },
-        })
-      : [];
+  const canDirectAssign =
+    canManage &&
+    (workOrder.assigneeType === "USER" ||
+      session.user.role === "ADMIN" ||
+      (workOrder.assigneeType === "DEPARTMENT" &&
+        session.user.role === "DEPT_HEAD" &&
+        workOrder.assignedDeptId === session.user.departmentId) ||
+      (workOrder.assigneeType === "DIVISION" &&
+        session.user.role === "DIV_HEAD" &&
+        workOrder.assignedDivId === session.user.divisionId));
+
+  const transferCandidates = canDirectAssign
+    ? await prisma.user.findMany({
+        where: assignableUsersWhere(session.user),
+        orderBy: { name: "asc" },
+      })
+    : [];
 
   const projects = canManage
     ? await prisma.project.findMany({ orderBy: { name: "asc" } })
@@ -207,11 +217,19 @@ export default async function WorkOrderDetailPage({
               하위 업무가 있어 진행률은 하위 업무 평균으로 자동 계산됩니다.
             </p>
           )}
-          {canManage && transferCandidates.length > 0 && (
+          {canDirectAssign && transferCandidates.length > 0 && (
             <div>
               <p className="mb-1 text-xs font-medium text-slate-500">
-                담당자 변경(이관)
+                {workOrder.assigneeType === "USER"
+                  ? "담당자 변경(이관)"
+                  : "담당자 개인 지정"}
               </p>
+              {workOrder.assigneeType !== "USER" && (
+                <p className="mb-1 text-xs text-slate-400">
+                  하위 업무를 새로 만들지 않고, 이 업무 자체를 소속 인원 개인
+                  담당으로 바로 넘길 수 있습니다.
+                </p>
+              )}
               <TransferEditor
                 id={workOrder.id}
                 currentUserId={workOrder.assignedUserId}
