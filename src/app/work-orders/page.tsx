@@ -10,6 +10,9 @@ import { TransferredBadge } from "@/components/transferred-badge";
 import { ProgressBar } from "@/components/progress-bar";
 import { BackToDashboard } from "@/components/back-to-dashboard";
 
+const UNASSIGNED_GROUP = "미지정";
+const DEPT_WIDE_GROUP = "부서 공통";
+
 export default async function WorkOrdersPage() {
   const session = await auth();
   if (!session?.user) return null;
@@ -21,14 +24,66 @@ export default async function WorkOrdersPage() {
     include: {
       project: { select: { name: true } },
       assignedDept: { select: { name: true } },
-      assignedDiv: { select: { name: true } },
-      assignedTeam: { select: { name: true } },
-      assignedUser: { select: { name: true } },
+      assignedDiv: {
+        select: { name: true, department: { select: { name: true } } },
+      },
+      assignedTeam: {
+        select: {
+          name: true,
+          division: {
+            select: { name: true, department: { select: { name: true } } },
+          },
+        },
+      },
+      assignedUser: {
+        select: {
+          name: true,
+          department: { select: { name: true } },
+          division: {
+            select: { name: true, department: { select: { name: true } } },
+          },
+        },
+      },
       createdBy: { select: { name: true } },
     },
     orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
     take: 100,
   });
+
+  function resolveGroup(wo: (typeof workOrders)[number]) {
+    if (wo.assignedDiv) {
+      return { dept: wo.assignedDiv.department.name, div: wo.assignedDiv.name };
+    }
+    if (wo.assignedTeam) {
+      return {
+        dept: wo.assignedTeam.division.department.name,
+        div: wo.assignedTeam.division.name,
+      };
+    }
+    if (wo.assignedUser?.division) {
+      return {
+        dept: wo.assignedUser.division.department.name,
+        div: wo.assignedUser.division.name,
+      };
+    }
+    if (wo.assignedUser?.department) {
+      return { dept: wo.assignedUser.department.name, div: DEPT_WIDE_GROUP };
+    }
+    if (wo.assignedDept) {
+      return { dept: wo.assignedDept.name, div: DEPT_WIDE_GROUP };
+    }
+    return { dept: UNASSIGNED_GROUP, div: UNASSIGNED_GROUP };
+  }
+
+  const groups = new Map<string, Map<string, typeof workOrders>>();
+  for (const wo of workOrders) {
+    const { dept, div } = resolveGroup(wo);
+    if (!groups.has(dept)) groups.set(dept, new Map());
+    const deptGroup = groups.get(dept)!;
+    if (!deptGroup.has(div)) deptGroup.set(div, []);
+    deptGroup.get(div)!.push(wo);
+  }
+  const sortedDepts = [...groups.keys()].sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
@@ -39,7 +94,7 @@ export default async function WorkOrdersPage() {
             Work Order 목록
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            내 권한 범위에 해당하는 업무지시 목록입니다.
+            내 권한 범위에 해당하는 업무지시를 과 단위로 묶어서 보여줍니다.
           </p>
         </div>
         {canManage && (
@@ -52,44 +107,71 @@ export default async function WorkOrdersPage() {
         )}
       </div>
 
-      <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
-        {workOrders.length === 0 ? (
+      {workOrders.length === 0 ? (
+        <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
           <p className="text-sm text-slate-400">해당하는 업무가 없습니다.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {workOrders.map((wo) => (
-              <li
-                key={wo.id}
-                className="flex flex-wrap items-center gap-3 rounded-md border border-slate-100 p-3 hover:border-blue-200"
-              >
-                <Link
-                  href={`/work-orders/${wo.id}`}
-                  className="min-w-[180px] flex-1 text-sm font-medium text-slate-800 hover:text-blue-600"
-                >
-                  {wo.title}
-                </Link>
-                <span className="text-xs text-slate-400">
-                  {wo.project.name}
-                </span>
-                <StatusBadge status={wo.status} />
-                <PriorityBadge priority={wo.priority} />
-                <TransferredBadge transferred={wo.transferred} />
-                <DelayBadge
-                  dueDate={wo.dueDate}
-                  status={wo.status}
-                  completedAt={wo.completedAt}
-                />
-                <span className="text-xs text-slate-400">
-                  {wo.createdBy.name} → {formatAssignee(wo)}
-                </span>
-                <div className="w-36">
-                  <ProgressBar value={wo.progress} />
+        </div>
+      ) : (
+        <div className="mt-6 flex flex-col gap-6">
+          {sortedDepts.map((dept) => {
+            const deptGroup = groups.get(dept)!;
+            const sortedDivs = [...deptGroup.keys()].sort((a, b) =>
+              a.localeCompare(b),
+            );
+            return (
+              <div key={dept}>
+                <h2 className="mb-2 text-sm font-semibold text-slate-800">
+                  {dept}
+                </h2>
+                <div className="flex flex-col gap-4">
+                  {sortedDivs.map((div) => (
+                    <div
+                      key={div}
+                      className="rounded-lg border border-slate-200 bg-white p-5"
+                    >
+                      <h3 className="mb-3 text-xs font-semibold text-slate-500">
+                        {div}
+                      </h3>
+                      <ul className="flex flex-col gap-2">
+                        {deptGroup.get(div)!.map((wo) => (
+                          <li
+                            key={wo.id}
+                            className="flex flex-wrap items-center gap-3 rounded-md border border-slate-100 p-3 hover:border-blue-200"
+                          >
+                            <Link
+                              href={`/work-orders/${wo.id}`}
+                              className="min-w-[180px] flex-1 text-sm font-medium text-slate-800 hover:text-blue-600"
+                            >
+                              {wo.title}
+                            </Link>
+                            <span className="text-xs text-slate-400">
+                              {wo.project.name}
+                            </span>
+                            <StatusBadge status={wo.status} />
+                            <PriorityBadge priority={wo.priority} />
+                            <TransferredBadge transferred={wo.transferred} />
+                            <DelayBadge
+                              dueDate={wo.dueDate}
+                              status={wo.status}
+                              completedAt={wo.completedAt}
+                            />
+                            <span className="text-xs text-slate-400">
+                              {wo.createdBy.name} → {formatAssignee(wo)}
+                            </span>
+                            <div className="w-36">
+                              <ProgressBar value={wo.progress} />
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
