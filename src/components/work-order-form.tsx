@@ -5,8 +5,9 @@ import { createWorkOrder } from "@/actions/work-orders";
 import { PRIORITY_LABEL } from "@/components/priority-badge";
 
 type Option = { id: string; name: string };
+type AssigneeType = "DEPARTMENT" | "DIVISION" | "TEAM" | "USER";
 
-const TYPE_LABEL: Record<string, string> = {
+const TYPE_LABEL: Record<AssigneeType, string> = {
   DEPARTMENT: "부서",
   DIVISION: "과",
   TEAM: "팀",
@@ -19,6 +20,7 @@ export function WorkOrderForm({
   divisions,
   teams,
   users,
+  allowedTypes,
   defaultProjectId,
   parentId,
 }: {
@@ -27,14 +29,15 @@ export function WorkOrderForm({
   divisions: Option[];
   teams: Option[];
   users: Option[];
+  allowedTypes: AssigneeType[];
   defaultProjectId?: string;
   parentId?: string;
 }) {
-  const [assigneeType, setAssigneeType] = useState<
-    "DEPARTMENT" | "DIVISION" | "TEAM" | "USER"
-  >("TEAM");
+  const [assigneeType, setAssigneeType] = useState<AssigneeType>(
+    allowedTypes[0] ?? "USER",
+  );
 
-  const optionsByType: Record<string, Option[]> = {
+  const optionsByType: Record<AssigneeType, Option[]> = {
     DEPARTMENT: departments,
     DIVISION: divisions,
     TEAM: teams,
@@ -77,7 +80,7 @@ export function WorkOrderForm({
 
       <div>
         <label className="mb-1 block text-sm font-medium text-slate-700">
-          설명
+          업무내용 및 참고사항
         </label>
         <textarea
           name="description"
@@ -114,25 +117,29 @@ export function WorkOrderForm({
         </select>
       </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
-          할당 단위
-        </label>
-        <div className="flex gap-4 text-sm text-slate-700">
-          {(["DEPARTMENT", "DIVISION", "TEAM", "USER"] as const).map((t) => (
-            <label key={t} className="flex items-center gap-1">
-              <input
-                type="radio"
-                name="assigneeType"
-                value={t}
-                checked={assigneeType === t}
-                onChange={() => setAssigneeType(t)}
-              />
-              {TYPE_LABEL[t]}
-            </label>
-          ))}
+      {allowedTypes.length > 1 ? (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            할당 단위
+          </label>
+          <div className="flex gap-4 text-sm text-slate-700">
+            {allowedTypes.map((t) => (
+              <label key={t} className="flex items-center gap-1">
+                <input
+                  type="radio"
+                  name="assigneeType"
+                  value={t}
+                  checked={assigneeType === t}
+                  onChange={() => setAssigneeType(t)}
+                />
+                {TYPE_LABEL[t]}
+              </label>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : (
+        <input type="hidden" name="assigneeType" value={assigneeType} />
+      )}
 
       <div>
         <label className="mb-1 block text-sm font-medium text-slate-700">

@@ -8,7 +8,11 @@ import path from "node:path";
 import { AssigneeType, Priority, WorkOrderStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { auth } from "@/auth";
-import { canManageWorkOrders } from "@/lib/org-access";
+import {
+  assignableTypesFor,
+  assignableUsersWhere,
+  canManageWorkOrders,
+} from "@/lib/org-access";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -48,6 +52,20 @@ export async function createWorkOrder(formData: FormData) {
 
   if (!title || !projectId || !assigneeType || !assigneeId) {
     throw new Error("제목, 프로젝트, 할당 대상을 모두 입력하세요.");
+  }
+
+  if (!assignableTypesFor(user.role).includes(assigneeType)) {
+    throw new Error("해당 단위로 할당할 권한이 없습니다.");
+  }
+
+  if (assigneeType === AssigneeType.USER) {
+    const assignable = await prisma.user.findFirst({
+      where: { id: assigneeId, ...assignableUsersWhere(user) },
+      select: { id: true },
+    });
+    if (!assignable) {
+      throw new Error("할당 권한이 없는 대상입니다.");
+    }
   }
 
   await prisma.workOrder.create({

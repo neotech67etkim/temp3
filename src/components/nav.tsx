@@ -16,6 +16,7 @@ export async function Nav() {
       ? [{ href: "/org", label: "조직 관리" }]
       : []),
     { href: "/account", label: "내 계정" },
+    { href: "/guide", label: "이용 안내" },
   ];
 
   return (

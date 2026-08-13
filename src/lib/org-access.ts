@@ -77,6 +77,48 @@ export function canManageWorkOrders(role: Role): boolean {
   return role !== "MEMBER";
 }
 
+/**
+ * Work Order 생성 시 선택 가능한 "할당 단위"(assigneeType).
+ * 관리자만 부서/과/팀 단위 할당이 가능하고, 나머지는 개인(과인원)에게만 할당한다.
+ */
+export function assignableTypesFor(role: Role): Array<"DEPARTMENT" | "DIVISION" | "TEAM" | "USER"> {
+  if (role === "ADMIN") return ["DEPARTMENT", "DIVISION", "TEAM", "USER"];
+  return ["USER"];
+}
+
+/**
+ * Work Order를 개인에게 할당할 때 선택 가능한 대상 사용자 범위.
+ * - 관리자: 제한 없음(null)
+ * - 부서장: 자기 부서 소속 과장/과원
+ * - 과장: 자기 과 소속 과원
+ * - 그 외(팀장/과원): 할당 권한 없음(존재할 수 없는 조건)
+ */
+export function assignableUsersWhere(
+  creator: ScopedUser,
+): Prisma.UserWhereInput {
+  switch (creator.role) {
+    case "ADMIN":
+      return {};
+
+    case "DEPT_HEAD":
+      if (!creator.departmentId) return { id: "__none__" };
+      return {
+        departmentId: creator.departmentId,
+        role: { in: ["DIV_HEAD", "MEMBER"] },
+      };
+
+    case "DIV_HEAD":
+      if (!creator.divisionId) return { id: "__none__" };
+      return {
+        divisionId: creator.divisionId,
+        role: "MEMBER",
+      };
+
+    default:
+      return { id: "__none__" };
+  }
+}
+
 export function canManageOrg(role: Role): boolean {
   return role === "ADMIN";
 }

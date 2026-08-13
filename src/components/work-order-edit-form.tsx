@@ -46,6 +46,7 @@ export function WorkOrderEditForm({
         name="description"
         defaultValue={description ?? ""}
         rows={3}
+        placeholder="업무내용 및 참고사항"
         className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
       />
       <input

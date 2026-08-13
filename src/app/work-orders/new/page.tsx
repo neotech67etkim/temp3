@@ -1,6 +1,10 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { canManageWorkOrders } from "@/lib/org-access";
+import {
+  assignableTypesFor,
+  assignableUsersWhere,
+  canManageWorkOrders,
+} from "@/lib/org-access";
 import { WorkOrderForm } from "@/components/work-order-form";
 
 export default async function NewWorkOrderPage({
@@ -19,13 +23,25 @@ export default async function NewWorkOrderPage({
     );
   }
 
+  const isAdmin = session.user.role === "ADMIN";
+  const allowedTypes = assignableTypesFor(session.user.role);
+
   const [projects, departments, divisions, teams, users, parent] =
     await Promise.all([
       prisma.project.findMany({ orderBy: { name: "asc" } }),
-      prisma.department.findMany({ orderBy: { name: "asc" } }),
-      prisma.division.findMany({ orderBy: { name: "asc" } }),
-      prisma.team.findMany({ orderBy: { name: "asc" } }),
-      prisma.user.findMany({ orderBy: { name: "asc" } }),
+      isAdmin
+        ? prisma.department.findMany({ orderBy: { name: "asc" } })
+        : Promise.resolve([]),
+      isAdmin
+        ? prisma.division.findMany({ orderBy: { name: "asc" } })
+        : Promise.resolve([]),
+      isAdmin
+        ? prisma.team.findMany({ orderBy: { name: "asc" } })
+        : Promise.resolve([]),
+      prisma.user.findMany({
+        where: assignableUsersWhere(session.user),
+        orderBy: { name: "asc" },
+      }),
       parentId
         ? prisma.workOrder.findUnique({
             where: { id: parentId },
@@ -43,6 +59,11 @@ export default async function NewWorkOrderPage({
           하위 업무를 할당합니다.
         </p>
       )}
+      {!isAdmin && users.length === 0 && (
+        <p className="mt-1 text-sm text-amber-600">
+          할당 가능한 인원이 없습니다. 조직 배치를 관리자에게 문의하세요.
+        </p>
+      )}
 
       <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
         <WorkOrderForm
@@ -51,6 +72,7 @@ export default async function NewWorkOrderPage({
           divisions={divisions}
           teams={teams}
           users={users}
+          allowedTypes={allowedTypes}
           defaultProjectId={projectId}
           parentId={parentId}
         />
