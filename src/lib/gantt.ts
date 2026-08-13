@@ -3,6 +3,9 @@ import { prisma } from "@/lib/db";
 import { formatAssignee } from "@/lib/format";
 import { isOverdue } from "@/lib/delay";
 
+export const GANTT_UNASSIGNED_GROUP = "미지정";
+export const GANTT_DEPT_WIDE_GROUP = "부서 공통";
+
 export type GanttItem = {
   id: string;
   title: string;
@@ -13,6 +16,7 @@ export type GanttItem = {
   progress: number;
   assignee: string;
   overdue: boolean;
+  divisionName: string;
 };
 
 export async function getGanttItems(scope: {
@@ -45,8 +49,8 @@ export async function getGanttItems(scope: {
     include: {
       assignedDept: { select: { name: true } },
       assignedDiv: { select: { name: true } },
-      assignedTeam: { select: { name: true } },
-      assignedUser: { select: { name: true } },
+      assignedTeam: { select: { name: true, division: { select: { name: true } } } },
+      assignedUser: { select: { name: true, division: { select: { name: true } } } },
     },
     orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
   });
@@ -61,6 +65,11 @@ export async function getGanttItems(scope: {
     progress: wo.progress,
     assignee: formatAssignee(wo),
     overdue: isOverdue(wo),
+    divisionName:
+      wo.assignedDiv?.name ??
+      wo.assignedTeam?.division.name ??
+      wo.assignedUser?.division?.name ??
+      (wo.assignedDept ? GANTT_DEPT_WIDE_GROUP : GANTT_UNASSIGNED_GROUP),
   }));
 }
 

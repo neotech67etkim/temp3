@@ -120,7 +120,6 @@ export async function createMyTodo(formData: FormData) {
     },
   });
 
-  revalidatePath("/work-list");
   revalidatePath("/dashboard");
 }
 
@@ -142,7 +141,6 @@ export async function updateWorkOrderStatus(id: string, formData: FormData) {
   revalidatePath(`/work-orders/${id}`);
   revalidatePath(`/projects/${workOrder.projectId}`);
   revalidatePath("/dashboard");
-  revalidatePath("/work-list");
 }
 
 export async function updateWorkOrderProgress(id: string, formData: FormData) {
@@ -171,7 +169,6 @@ export async function updateWorkOrderProgress(id: string, formData: FormData) {
   revalidatePath(`/work-orders/${id}`);
   revalidatePath(`/projects/${workOrder.projectId}`);
   revalidatePath("/dashboard");
-  revalidatePath("/work-list");
 }
 
 /** 담당자가 진행관련 정보 및 질문(텍스트/스크린샷/참고 파일 경로)을 남긴다. */
@@ -238,7 +235,6 @@ export async function updateWorkOrderPriority(id: string, formData: FormData) {
   revalidatePath(`/work-orders/${id}`);
   revalidatePath(`/projects/${workOrder.projectId}`);
   revalidatePath("/dashboard");
-  revalidatePath("/work-list");
 }
 
 /** 개인에게 할당된 업무를 내 권한 범위 안의 다른 사람에게 이관한다. */
@@ -318,7 +314,6 @@ export async function reassignWorkOrder(id: string, formData: FormData) {
 
   revalidatePath("/work-orders");
   revalidatePath(`/work-orders/${id}`);
-  revalidatePath("/work-list");
   revalidatePath("/dashboard");
 }
 
@@ -385,7 +380,6 @@ export async function updateWorkOrderDetails(id: string, formData: FormData) {
     if (current.parentId) revalidatePath(`/work-orders/${current.parentId}`);
   }
   revalidatePath("/dashboard");
-  revalidatePath("/work-list");
 }
 
 export async function deleteWorkOrder(formData: FormData) {
@@ -398,7 +392,6 @@ export async function deleteWorkOrder(formData: FormData) {
 
   revalidatePath("/work-orders");
   revalidatePath("/dashboard");
-  revalidatePath("/work-list");
   revalidatePath(`/projects/${workOrder.projectId}`);
   if (workOrder.parentId) revalidatePath(`/work-orders/${workOrder.parentId}`);
   redirect(`/projects/${workOrder.projectId}`);

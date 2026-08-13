@@ -32,7 +32,7 @@ type ProjectKey = "TRION" | "RUYA" | "DH" | "OPS";
 async function main() {
   const passwordHash = await bcrypt.hash("password123", 10);
 
-  const admin = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: "admin@company.com" },
     update: {},
     create: {
@@ -248,6 +248,11 @@ async function main() {
       },
     });
   }
+
+  // Work Order 지시자는 실제 지시권자인 부서장 계정으로 기록한다(관리자 계정은 시스템 관리용).
+  const deptHead = await prisma.user.findUniqueOrThrow({
+    where: { email: "leejs@hd.com" },
+  });
 
   // --- 카테고리 / 프로젝트(공사) ---
   const constructionCategory = await prisma.category.upsert({
@@ -470,7 +475,7 @@ async function main() {
         priority: item.priority ?? Priority.NORMAL,
         status: item.status ?? WorkOrderStatus.NOT_STARTED,
         dueDate: item.dueDate ? new Date(item.dueDate) : null,
-        createdById: admin.id,
+        createdById: deptHead.id,
       },
     });
 
@@ -486,7 +491,7 @@ async function main() {
           status: inProgress
             ? WorkOrderStatus.IN_PROGRESS
             : WorkOrderStatus.NOT_STARTED,
-          createdById: admin.id,
+          createdById: deptHead.id,
         },
       });
     }

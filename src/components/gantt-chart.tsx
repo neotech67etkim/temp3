@@ -45,6 +45,21 @@ export function GanttChart({ items }: { items: GanttItem[] }) {
     cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
   }
 
+  const days: { label: string; offsetPx: number; isMonthStart: boolean }[] = [];
+  let dayCursor = rangeStart;
+  while (dayCursor < rangeEnd) {
+    days.push({
+      label: String(dayCursor.getDate()),
+      offsetPx: daysBetween(rangeStart, dayCursor) * PX_PER_DAY,
+      isMonthStart: dayCursor.getDate() === 1,
+    });
+    dayCursor = addDays(dayCursor, 1);
+  }
+
+  function formatDate(d: Date) {
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
       <div style={{ width: `${LABEL_WIDTH + totalWidth}px` }}>
@@ -56,10 +71,30 @@ export function GanttChart({ items }: { items: GanttItem[] }) {
             {months.map((m) => (
               <div
                 key={m.label}
-                className="absolute top-0 bottom-0 border-l border-slate-100 pl-1 pt-2"
+                className="absolute top-0 bottom-0 border-l border-slate-300 pl-1 pt-1 font-medium text-slate-600"
                 style={{ left: m.offsetPx }}
               >
                 {m.label}
+              </div>
+            ))}
+            <div
+              className="absolute top-0 bottom-0 w-px bg-red-300"
+              style={{ left: todayOffset }}
+            />
+          </div>
+        </div>
+        <div className="flex border-b border-slate-200 text-[10px] text-slate-400">
+          <div className="sticky left-0 z-10 w-[260px] shrink-0 bg-white" />
+          <div className="relative shrink-0" style={{ width: totalWidth, height: 18 }}>
+            {days.map((d) => (
+              <div
+                key={d.offsetPx}
+                className={`absolute top-0 bottom-0 text-center ${
+                  d.isMonthStart ? "border-l border-slate-300" : "border-l border-slate-50"
+                }`}
+                style={{ left: d.offsetPx, width: PX_PER_DAY }}
+              >
+                {d.label}
               </div>
             ))}
             <div
@@ -89,14 +124,17 @@ export function GanttChart({ items }: { items: GanttItem[] }) {
                 >
                   {item.title}
                 </Link>
-                <p className="truncate text-slate-400">{item.assignee}</p>
+                <p className="truncate text-slate-400">
+                  {item.assignee} · {formatDate(item.createdAt)} ~{" "}
+                  {formatDate(end)}
+                </p>
               </div>
               <div
                 className="relative shrink-0"
                 style={{ width: totalWidth, height: 40 }}
               >
                 <div
-                  title={`${item.title} (${item.progress}%)`}
+                  title={`${item.title} (${formatDate(item.createdAt)} ~ ${formatDate(end)}, ${item.progress}%)`}
                   className={`absolute top-2 h-5 rounded ${STATUS_BAR_CLASS[item.status]} ${
                     item.overdue ? "ring-2 ring-red-600" : ""
                   }`}

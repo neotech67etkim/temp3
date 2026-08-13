@@ -11,7 +11,6 @@ export async function Nav() {
     { href: "/projects", label: "프로젝트" },
     { href: "/work-orders", label: "Work Order" },
     { href: "/gantt", label: "간트차트" },
-    { href: "/work-list", label: "업무리스트" },
     ...(canManageOrg(session.user.role)
       ? [{ href: "/org", label: "조직 관리" }]
       : []),

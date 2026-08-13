@@ -1,8 +1,28 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { getGanttItems } from "@/lib/gantt";
+import {
+  GANTT_DEPT_WIDE_GROUP,
+  GANTT_UNASSIGNED_GROUP,
+  getGanttItems,
+  type GanttItem,
+} from "@/lib/gantt";
 import { GanttChart } from "@/components/gantt-chart";
 import { BackToDashboard } from "@/components/back-to-dashboard";
+
+function groupByDivision(items: GanttItem[]) {
+  const groups = new Map<string, GanttItem[]>();
+  for (const item of items) {
+    if (!groups.has(item.divisionName)) groups.set(item.divisionName, []);
+    groups.get(item.divisionName)!.push(item);
+  }
+  return [...groups.entries()].sort(([a], [b]) => {
+    if (a === GANTT_UNASSIGNED_GROUP) return 1;
+    if (b === GANTT_UNASSIGNED_GROUP) return -1;
+    if (a === GANTT_DEPT_WIDE_GROUP) return 1;
+    if (b === GANTT_DEPT_WIDE_GROUP) return -1;
+    return a.localeCompare(b);
+  });
+}
 
 export default async function GanttPage({
   searchParams,
@@ -62,6 +82,8 @@ export default async function GanttPage({
     divisionId,
   });
 
+  const divisionGroups = !divisionId ? groupByDivision(items) : null;
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       <BackToDashboard />
@@ -116,9 +138,22 @@ export default async function GanttPage({
 
       <Legend />
 
-      <div className="mt-4">
-        <GanttChart items={items} />
-      </div>
+      {divisionGroups ? (
+        <div className="mt-4 flex flex-col gap-6">
+          {divisionGroups.map(([divisionName, divisionItems]) => (
+            <div key={divisionName}>
+              <h2 className="mb-2 text-sm font-semibold text-slate-800">
+                {divisionName}
+              </h2>
+              <GanttChart items={divisionItems} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-4">
+          <GanttChart items={items} />
+        </div>
+      )}
     </div>
   );
 }

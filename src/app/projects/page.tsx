@@ -22,6 +22,19 @@ export default async function ProjectsPage() {
     prisma.category.findMany({ orderBy: { name: "asc" } }),
   ]);
 
+  const UNCATEGORIZED_GROUP = "업무영역 없음";
+  const groups = new Map<string, typeof projects>();
+  for (const project of projects) {
+    const key = project.category?.name ?? UNCATEGORIZED_GROUP;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(project);
+  }
+  const sortedGroupNames = [...groups.keys()].sort((a, b) => {
+    if (a === UNCATEGORIZED_GROUP) return 1;
+    if (b === UNCATEGORIZED_GROUP) return -1;
+    return a.localeCompare(b);
+  });
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       <BackToDashboard />
@@ -30,49 +43,55 @@ export default async function ProjectsPage() {
         공통 프로젝트 단위로 Work Order를 관리합니다.
       </p>
 
-      <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
-        <h2 className="mb-4 text-sm font-semibold text-slate-800">
-          프로젝트 목록
-        </h2>
+      <div className="mt-6 flex flex-col gap-6">
         {projects.length === 0 ? (
-          <p className="text-sm text-slate-400">등록된 프로젝트가 없습니다.</p>
+          <div className="rounded-lg border border-slate-200 bg-white p-5">
+            <p className="text-sm text-slate-400">등록된 프로젝트가 없습니다.</p>
+          </div>
         ) : (
-          <ul className="flex flex-col gap-3">
-            {projects.map((project) => {
-              const progressMap = computeProgress(project.workOrders);
-              const roots = project.workOrders.filter((w) => !w.parentId);
-              const overall = roots.length
-                ? Math.round(
-                    roots.reduce(
-                      (sum, w) => sum + (progressMap.get(w.id) ?? 0),
-                      0,
-                    ) / roots.length,
-                  )
-                : 0;
-              return (
-                <li
-                  key={project.id}
-                  className="flex items-center gap-4 rounded-md border border-slate-100 p-3 hover:border-blue-200"
-                >
-                  <Link
-                    href={`/projects/${project.id}`}
-                    className="flex-1 text-sm font-medium text-slate-800 hover:text-blue-600"
-                  >
-                    {project.name}
-                  </Link>
-                  <span className="text-xs text-slate-400">
-                    {project.category?.name ?? "업무영역 없음"}
-                  </span>
-                  <span className="text-xs text-slate-400">
-                    업무 {project.workOrders.length}건
-                  </span>
-                  <div className="w-40">
-                    <ProgressBar value={overall} />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          sortedGroupNames.map((groupName) => (
+            <div
+              key={groupName}
+              className="rounded-lg border border-slate-200 bg-white p-5"
+            >
+              <h2 className="mb-4 text-sm font-semibold text-slate-800">
+                {groupName}
+              </h2>
+              <ul className="flex flex-col gap-3">
+                {groups.get(groupName)!.map((project) => {
+                  const progressMap = computeProgress(project.workOrders);
+                  const roots = project.workOrders.filter((w) => !w.parentId);
+                  const overall = roots.length
+                    ? Math.round(
+                        roots.reduce(
+                          (sum, w) => sum + (progressMap.get(w.id) ?? 0),
+                          0,
+                        ) / roots.length,
+                      )
+                    : 0;
+                  return (
+                    <li
+                      key={project.id}
+                      className="flex items-center gap-4 rounded-md border border-slate-100 p-3 hover:border-blue-200"
+                    >
+                      <Link
+                        href={`/projects/${project.id}`}
+                        className="flex-1 text-sm font-medium text-slate-800 hover:text-blue-600"
+                      >
+                        {project.name}
+                      </Link>
+                      <span className="text-xs text-slate-400">
+                        업무 {project.workOrders.length}건
+                      </span>
+                      <div className="w-40">
+                        <ProgressBar value={overall} />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))
         )}
       </div>
 

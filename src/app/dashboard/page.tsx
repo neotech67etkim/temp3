@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { getCategoryProgress, getOrgProgressTree } from "@/lib/dashboard";
 import { computeProgress } from "@/lib/progress";
 import { formatAssignee } from "@/lib/format";
-import { myWorkListWhere } from "@/lib/org-access";
+import { canManageWorkOrders, myWorkListWhere } from "@/lib/org-access";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusBadge } from "@/components/status-badge";
 import { PriorityBadge } from "@/components/priority-badge";
@@ -14,7 +14,6 @@ import { CategoryProgressChart } from "@/components/category-progress-chart";
 import { StatusPieChart } from "@/components/status-pie-chart";
 import { MyTodoForm } from "@/components/my-todo-form";
 
-const WORK_LIST_PREVIEW_LIMIT = 5;
 const RECENT_LOG_LIMIT = 5;
 
 function StatCard({ label, value }: { label: string; value: string }) {
@@ -28,6 +27,9 @@ function StatCard({ label, value }: { label: string; value: string }) {
 
 export default async function DashboardPage() {
   const session = await auth();
+  const canDelegate = session?.user
+    ? canManageWorkOrders(session.user.role)
+    : false;
 
   const [categories, orgTree, projects, workList] = await Promise.all([
     getCategoryProgress(),
@@ -72,7 +74,6 @@ export default async function DashboardPage() {
       })
     : [];
   const workListProgressMap = computeProgress(workListProjectWorkOrders);
-  const workListPreview = workList.slice(0, WORK_LIST_PREVIEW_LIMIT);
 
   const myDeptTree = session?.user?.departmentId
     ? orgTree.filter((d) => d.id === session.user.departmentId)
@@ -111,27 +112,17 @@ export default async function DashboardPage() {
 
       {session?.user && (
         <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-800">
-              내 업무리스트
-            </h2>
-            {workList.length > WORK_LIST_PREVIEW_LIMIT && (
-              <Link
-                href="/work-list"
-                className="text-xs text-blue-600 hover:underline"
-              >
-                전체 보기 ({workList.length}건)
-              </Link>
-            )}
-          </div>
+          <h2 className="mb-4 text-sm font-semibold text-slate-800">
+            내 업무리스트
+          </h2>
 
           <MyTodoForm projects={projects} />
 
-          {workListPreview.length === 0 ? (
+          {workList.length === 0 ? (
             <p className="mt-4 text-sm text-slate-400">표시할 업무가 없습니다.</p>
           ) : (
             <ul className="mt-4 flex flex-col gap-2">
-              {workListPreview.map((item) => {
+              {workList.map((item) => {
                 const hasChildren = item.children.length > 0;
                 const progress = hasChildren
                   ? (workListProgressMap.get(item.id) ?? item.progress)
@@ -166,6 +157,14 @@ export default async function DashboardPage() {
                     <div className="w-32">
                       <ProgressBar value={progress} />
                     </div>
+                    {canDelegate && (
+                      <Link
+                        href={`/work-orders/new?projectId=${item.projectId}&parentId=${item.id}`}
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        + 하위 업무로 위임
+                      </Link>
+                    )}
                   </li>
                 );
               })}
