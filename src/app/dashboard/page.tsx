@@ -15,6 +15,7 @@ import { StatusPieChart } from "@/components/status-pie-chart";
 import { MyTodoForm } from "@/components/my-todo-form";
 
 const WORK_LIST_PREVIEW_LIMIT = 5;
+const RECENT_LOG_LIMIT = 5;
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
@@ -50,6 +51,18 @@ export default async function DashboardPage() {
         })
       : Promise.resolve([]),
   ]);
+
+  const recentLogs = session?.user
+    ? await prisma.workOrderLog.findMany({
+        where: { workOrder: myWorkListWhere(session.user) },
+        include: {
+          author: { select: { name: true } },
+          workOrder: { select: { id: true, title: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: RECENT_LOG_LIMIT,
+      })
+    : [];
 
   const workListProjectIds = [...new Set(workList.map((t) => t.projectId))];
   const workListProjectWorkOrders = workListProjectIds.length
@@ -158,6 +171,39 @@ export default async function DashboardPage() {
               })}
             </ul>
           )}
+        </div>
+      )}
+
+      {recentLogs.length > 0 && (
+        <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
+          <h2 className="mb-4 text-sm font-semibold text-slate-800">
+            최근 진행관련 정보 및 질문
+          </h2>
+          <ul className="flex flex-col gap-3">
+            {recentLogs.map((log) => (
+              <li
+                key={log.id}
+                className="rounded-md border border-slate-100 p-3 hover:border-blue-200"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Link
+                    href={`/work-orders/${log.workOrder.id}`}
+                    className="text-sm font-medium text-slate-800 hover:text-blue-600"
+                  >
+                    {log.workOrder.title}
+                  </Link>
+                  <span className="text-xs text-slate-400">
+                    {log.author.name} · {log.createdAt.toLocaleString("ko-KR")}
+                  </span>
+                </div>
+                {log.note && (
+                  <p className="mt-1 text-sm whitespace-pre-line text-slate-600">
+                    {log.note}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

@@ -174,7 +174,7 @@ export async function updateWorkOrderProgress(id: string, formData: FormData) {
   revalidatePath("/work-list");
 }
 
-/** 담당자가 진행 경과(텍스트/스크린샷/참고 파일 경로)를 남긴다. */
+/** 담당자가 진행관련 정보 및 질문(텍스트/스크린샷/참고 파일 경로)을 남긴다. */
 export async function addWorkOrderLog(workOrderId: string, formData: FormData) {
   const session = await auth();
   if (!session?.user) throw new Error("로그인이 필요합니다.");

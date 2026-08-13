@@ -288,7 +288,7 @@ export default async function WorkOrderDetailPage({
 
       <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="mb-4 text-sm font-semibold text-slate-800">
-          진행 경과
+          진행관련 정보 및 질문
         </h2>
         {(canManage || isAssignedToMe) && (
           <div className="mb-6 border-b border-slate-100 pb-6">

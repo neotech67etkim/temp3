@@ -56,7 +56,7 @@ export function WorkOrderLogForm({ workOrderId }: { workOrderId: string }) {
       <textarea
         name="note"
         rows={3}
-        placeholder="진행 경과나 결과를 입력하세요"
+        placeholder="진행관련 정보 및 질문을 입력하세요"
         className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
       />
 

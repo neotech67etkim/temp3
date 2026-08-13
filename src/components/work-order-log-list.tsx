@@ -11,7 +11,9 @@ type LogItem = {
 export function WorkOrderLogList({ logs }: { logs: LogItem[] }) {
   if (logs.length === 0) {
     return (
-      <p className="text-sm text-slate-400">등록된 진행 경과가 없습니다.</p>
+      <p className="text-sm text-slate-400">
+        등록된 진행관련 정보 및 질문이 없습니다.
+      </p>
     );
   }
 
