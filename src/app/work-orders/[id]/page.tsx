@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { computeProgress } from "@/lib/progress";
-import { canManageWorkOrders } from "@/lib/org-access";
+import { assignableUsersWhere, canManageWorkOrders } from "@/lib/org-access";
 import { formatAssignee } from "@/lib/format";
 import { deleteWorkOrder } from "@/actions/work-orders";
 import { StatusBadge } from "@/components/status-badge";
@@ -17,6 +17,7 @@ import { WorkOrderEditForm } from "@/components/work-order-edit-form";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { WorkOrderLogForm } from "@/components/work-order-log-form";
 import { WorkOrderLogList } from "@/components/work-order-log-list";
+import { TransferEditor } from "@/components/transfer-editor";
 
 export default async function WorkOrderDetailPage({
   params,
@@ -64,6 +65,14 @@ export default async function WorkOrderDetailPage({
   const canManage = canManageWorkOrders(session.user.role);
   const isAssignedToMe = workOrder.assignedUserId === session.user.id;
   const hasChildren = workOrder.children.length > 0;
+
+  const transferCandidates =
+    canManage && workOrder.assigneeType === "USER"
+      ? await prisma.user.findMany({
+          where: assignableUsersWhere(session.user),
+          orderBy: { name: "asc" },
+        })
+      : [];
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
@@ -187,6 +196,18 @@ export default async function WorkOrderDetailPage({
             <p className="text-xs text-slate-400">
               하위 업무가 있어 진행률은 하위 업무 평균으로 자동 계산됩니다.
             </p>
+          )}
+          {canManage && transferCandidates.length > 0 && (
+            <div>
+              <p className="mb-1 text-xs font-medium text-slate-500">
+                담당자 변경(이관)
+              </p>
+              <TransferEditor
+                id={workOrder.id}
+                currentUserId={workOrder.assignedUserId}
+                candidates={transferCandidates}
+              />
+            </div>
           )}
         </div>
       )}

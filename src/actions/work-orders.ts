@@ -12,6 +12,7 @@ import {
   assignableTypesFor,
   assignableUsersWhere,
   canManageWorkOrders,
+  workOrderScopeWhere,
 } from "@/lib/org-access";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -88,6 +89,40 @@ export async function createWorkOrder(formData: FormData) {
   if (parentId) revalidatePath(`/work-orders/${parentId}`);
 
   redirect(`/projects/${projectId}`);
+}
+
+/** 자기 자신에게 할당되는 개인 할일을 만든다(내 할일). */
+export async function createMyTodo(formData: FormData) {
+  const session = await auth();
+  if (!session?.user) throw new Error("로그인이 필요합니다.");
+
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim() || null;
+  const projectId = String(formData.get("projectId") ?? "");
+  const dueDateRaw = formData.get("dueDate") as string | null;
+  const dueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+  const priority = (formData.get("priority") as Priority) || Priority.NORMAL;
+
+  if (!title || !projectId) {
+    throw new Error("제목과 프로젝트를 입력하세요.");
+  }
+
+  await prisma.workOrder.create({
+    data: {
+      title,
+      description,
+      projectId,
+      assigneeType: AssigneeType.USER,
+      assignedUserId: session.user.id,
+      dueDate,
+      priority,
+      createdById: session.user.id,
+    },
+  });
+
+  revalidatePath("/my-todos");
+  revalidatePath("/my-tasks");
+  revalidatePath("/dashboard");
 }
 
 export async function updateWorkOrderStatus(id: string, formData: FormData) {
@@ -205,6 +240,55 @@ export async function updateWorkOrderPriority(id: string, formData: FormData) {
   revalidatePath(`/projects/${workOrder.projectId}`);
   revalidatePath("/dashboard");
   revalidatePath("/my-tasks");
+}
+
+/** 개인에게 할당된 업무를 내 권한 범위 안의 다른 사람에게 이관한다. */
+export async function reassignWorkOrder(id: string, formData: FormData) {
+  const session = await auth();
+  if (!session?.user || !canManageWorkOrders(session.user.role)) {
+    throw new Error("업무를 이관할 권한이 없습니다.");
+  }
+
+  const newAssigneeId = String(formData.get("assigneeId") ?? "");
+  if (!newAssigneeId) throw new Error("이관할 담당자를 선택하세요.");
+
+  const workOrder = await prisma.workOrder.findFirst({
+    where: { id, ...workOrderScopeWhere(session.user) },
+    include: { assignedUser: { select: { name: true } } },
+  });
+  if (!workOrder) throw new Error("이관 권한이 없는 업무입니다.");
+
+  if (workOrder.assigneeType !== AssigneeType.USER) {
+    throw new Error("개인에게 할당된 업무만 이관할 수 있습니다.");
+  }
+
+  if (newAssigneeId === workOrder.assignedUserId) return;
+
+  const target = await prisma.user.findFirst({
+    where: { id: newAssigneeId, ...assignableUsersWhere(session.user) },
+    select: { id: true, name: true },
+  });
+  if (!target) throw new Error("이관 권한이 없는 대상입니다.");
+
+  await prisma.$transaction([
+    prisma.workOrder.update({
+      where: { id },
+      data: { assignedUserId: target.id },
+    }),
+    prisma.workOrderLog.create({
+      data: {
+        workOrderId: id,
+        authorId: session.user.id,
+        note: `담당자를 ${workOrder.assignedUser?.name ?? "미지정"}님에서 ${target.name}님으로 이관했습니다.`,
+      },
+    }),
+  ]);
+
+  revalidatePath("/work-orders");
+  revalidatePath(`/work-orders/${id}`);
+  revalidatePath("/my-tasks");
+  revalidatePath("/my-todos");
+  revalidatePath("/dashboard");
 }
 
 export async function updateWorkOrderDetails(id: string, formData: FormData) {
