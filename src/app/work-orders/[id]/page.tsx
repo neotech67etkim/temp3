@@ -9,7 +9,9 @@ import { deleteWorkOrder } from "@/actions/work-orders";
 import { StatusBadge } from "@/components/status-badge";
 import { PriorityBadge } from "@/components/priority-badge";
 import { DelayBadge } from "@/components/delay-badge";
+import { TransferredBadge } from "@/components/transferred-badge";
 import { ProgressBar } from "@/components/progress-bar";
+import { BackToDashboard } from "@/components/back-to-dashboard";
 import { StatusEditor } from "@/components/status-editor";
 import { PriorityEditor } from "@/components/priority-editor";
 import { ProgressEditor } from "@/components/progress-editor";
@@ -76,6 +78,7 @@ export default async function WorkOrderDetailPage({
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
+      <BackToDashboard />
       <div className="flex flex-col gap-1 text-xs text-slate-400">
         <Link
           href={`/projects/${workOrder.projectId}`}
@@ -107,6 +110,7 @@ export default async function WorkOrderDetailPage({
         <div className="flex shrink-0 items-center gap-2">
           <PriorityBadge priority={workOrder.priority} />
           <StatusBadge status={workOrder.status} />
+          <TransferredBadge transferred={workOrder.transferred} />
           <DelayBadge
             dueDate={workOrder.dueDate}
             status={workOrder.status}

@@ -1,12 +1,52 @@
+import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { getGanttItems } from "@/lib/gantt";
 import { GanttChart } from "@/components/gantt-chart";
+import { BackToDashboard } from "@/components/back-to-dashboard";
 
 export default async function GanttPage({
   searchParams,
 }: {
   searchParams: Promise<{ departmentId?: string; divisionId?: string }>;
 }) {
+  const session = await auth();
+  if (!session?.user) return null;
+
+  const canBrowseAll = ["ADMIN", "DEPT_HEAD", "DIV_HEAD"].includes(
+    session.user.role,
+  );
+
+  if (!canBrowseAll) {
+    const division = session.user.divisionId
+      ? await prisma.division.findUnique({
+          where: { id: session.user.divisionId },
+          select: { id: true, name: true },
+        })
+      : null;
+
+    const items = division
+      ? await getGanttItems({ divisionId: division.id })
+      : [];
+
+    return (
+      <div className="mx-auto max-w-6xl px-6 py-8">
+        <BackToDashboard />
+        <h1 className="text-xl font-semibold text-slate-900">간트차트</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          {division
+            ? `소속 과(${division.name})의 Work Order 일정과 지연 여부를 확인합니다.`
+            : "소속된 과가 없어 표시할 내용이 없습니다."}
+        </p>
+
+        <Legend />
+
+        <div className="mt-4">
+          <GanttChart items={items} />
+        </div>
+      </div>
+    );
+  }
+
   const { departmentId, divisionId } = await searchParams;
 
   const departments = await prisma.department.findMany({
@@ -24,6 +64,7 @@ export default async function GanttPage({
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
+      <BackToDashboard />
       <h1 className="text-xl font-semibold text-slate-900">간트차트</h1>
       <p className="mt-1 text-sm text-slate-500">
         부서 또는 과 단위로 Work Order의 일정과 지연 여부를 확인합니다.
@@ -73,30 +114,36 @@ export default async function GanttPage({
         </button>
       </form>
 
-      <div className="mt-4 flex items-center gap-4 text-xs text-slate-500">
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded bg-slate-300" /> 시작전
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded bg-blue-500" /> 진행중
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded bg-amber-400" /> 보류
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded bg-green-500" /> 완료
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded ring-2 ring-red-600" /> 지연
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-px bg-red-300" /> 오늘
-        </span>
-      </div>
+      <Legend />
 
       <div className="mt-4">
         <GanttChart items={items} />
       </div>
+    </div>
+  );
+}
+
+function Legend() {
+  return (
+    <div className="mt-4 flex items-center gap-4 text-xs text-slate-500">
+      <span className="flex items-center gap-1">
+        <span className="inline-block h-3 w-3 rounded bg-slate-300" /> 시작전
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="inline-block h-3 w-3 rounded bg-blue-500" /> 진행중
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="inline-block h-3 w-3 rounded bg-amber-400" /> 보류
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="inline-block h-3 w-3 rounded bg-green-500" /> 완료
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="inline-block h-3 w-3 rounded ring-2 ring-red-600" /> 지연
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="inline-block h-3 w-px bg-red-300" /> 오늘
+      </span>
     </div>
   );
 }

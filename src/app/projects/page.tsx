@@ -5,6 +5,7 @@ import { computeProgress } from "@/lib/progress";
 import { canManageWorkOrders } from "@/lib/org-access";
 import { createProject, createCategory } from "@/actions/work-orders";
 import { ProgressBar } from "@/components/progress-bar";
+import { BackToDashboard } from "@/components/back-to-dashboard";
 
 export default async function ProjectsPage() {
   const session = await auth();
@@ -23,6 +24,7 @@ export default async function ProjectsPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
+      <BackToDashboard />
       <h1 className="text-xl font-semibold text-slate-900">프로젝트</h1>
       <p className="mt-1 text-sm text-slate-500">
         공통 프로젝트 단위로 Work Order를 관리합니다.
@@ -59,7 +61,7 @@ export default async function ProjectsPage() {
                     {project.name}
                   </Link>
                   <span className="text-xs text-slate-400">
-                    {project.category?.name ?? "카테고리 없음"}
+                    {project.category?.name ?? "업무영역 없음"}
                   </span>
                   <span className="text-xs text-slate-400">
                     업무 {project.workOrders.length}건
@@ -81,12 +83,12 @@ export default async function ProjectsPage() {
             className="rounded-lg border border-slate-200 bg-white p-5"
           >
             <h3 className="mb-3 text-sm font-semibold text-slate-800">
-              카테고리 추가
+              업무영역 추가
             </h3>
             <input
               name="name"
               required
-              placeholder="카테고리명"
+              placeholder="업무영역명"
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
             <input
@@ -126,7 +128,7 @@ export default async function ProjectsPage() {
               name="categoryId"
               className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             >
-              <option value="">카테고리 선택 (선택)</option>
+              <option value="">업무영역 선택 (선택)</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}

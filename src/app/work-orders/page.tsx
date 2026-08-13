@@ -6,7 +6,9 @@ import { formatAssignee } from "@/lib/format";
 import { StatusBadge } from "@/components/status-badge";
 import { PriorityBadge } from "@/components/priority-badge";
 import { DelayBadge } from "@/components/delay-badge";
+import { TransferredBadge } from "@/components/transferred-badge";
 import { ProgressBar } from "@/components/progress-bar";
+import { BackToDashboard } from "@/components/back-to-dashboard";
 
 export default async function WorkOrdersPage() {
   const session = await auth();
@@ -30,6 +32,7 @@ export default async function WorkOrdersPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
+      <BackToDashboard />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">
@@ -70,6 +73,7 @@ export default async function WorkOrdersPage() {
                 </span>
                 <StatusBadge status={wo.status} />
                 <PriorityBadge priority={wo.priority} />
+                <TransferredBadge transferred={wo.transferred} />
                 <DelayBadge
                   dueDate={wo.dueDate}
                   status={wo.status}

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { buildTree, computeProgress } from "@/lib/progress";
 import { canManageWorkOrders } from "@/lib/org-access";
 import { WorkOrderTree } from "@/components/work-order-tree";
+import { BackToDashboard } from "@/components/back-to-dashboard";
 
 export default async function ProjectDetailPage({
   params,
@@ -39,6 +40,7 @@ export default async function ProjectDetailPage({
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
+      <BackToDashboard />
       <Link href="/projects" className="text-xs text-slate-400 hover:text-blue-600">
         ← 프로젝트 목록
       </Link>
@@ -51,7 +53,7 @@ export default async function ProjectDetailPage({
             <p className="mt-1 text-sm text-slate-500">{project.description}</p>
           )}
           <p className="mt-1 text-xs text-slate-400">
-            카테고리: {project.category?.name ?? "없음"}
+            업무영역: {project.category?.name ?? "없음"}
           </p>
         </div>
         {canManage && (

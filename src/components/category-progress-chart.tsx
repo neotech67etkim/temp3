@@ -15,7 +15,7 @@ type Datum = { name: string; progress: number };
 export function CategoryProgressChart({ data }: { data: Datum[] }) {
   if (data.length === 0) {
     return (
-      <p className="text-sm text-slate-400">표시할 카테고리가 없습니다.</p>
+      <p className="text-sm text-slate-400">표시할 업무영역이 없습니다.</p>
     );
   }
 

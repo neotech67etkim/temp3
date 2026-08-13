@@ -6,6 +6,7 @@ import {
   canManageWorkOrders,
 } from "@/lib/org-access";
 import { WorkOrderForm } from "@/components/work-order-form";
+import { BackToDashboard } from "@/components/back-to-dashboard";
 
 export default async function NewWorkOrderPage({
   searchParams,
@@ -18,6 +19,7 @@ export default async function NewWorkOrderPage({
   if (!session?.user || !canManageWorkOrders(session.user.role)) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-8">
+        <BackToDashboard />
         <p className="text-sm text-red-600">업무를 생성할 권한이 없습니다.</p>
       </div>
     );
@@ -52,6 +54,7 @@ export default async function NewWorkOrderPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-8">
+      <BackToDashboard />
       <h1 className="text-xl font-semibold text-slate-900">Work Order 할당</h1>
       {parent && (
         <p className="mt-1 text-sm text-slate-500">

@@ -2,32 +2,41 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { computeProgress } from "@/lib/progress";
-import { canManageWorkOrders } from "@/lib/org-access";
+import { formatAssignee } from "@/lib/format";
+import { canManageWorkOrders, myWorkListWhere } from "@/lib/org-access";
 import { StatusBadge } from "@/components/status-badge";
 import { PriorityBadge } from "@/components/priority-badge";
 import { DelayBadge } from "@/components/delay-badge";
+import { TransferredBadge } from "@/components/transferred-badge";
 import { ProgressBar } from "@/components/progress-bar";
 import { MyTodoForm } from "@/components/my-todo-form";
+import { BackToDashboard } from "@/components/back-to-dashboard";
 
-export default async function MyTodosPage() {
+export default async function WorkListPage() {
   const session = await auth();
   if (!session?.user) return null;
 
   const canDelegate = canManageWorkOrders(session.user.role);
+  const where = myWorkListWhere(session.user);
 
-  const [projects, todos] = await Promise.all([
+  const [projects, items] = await Promise.all([
     prisma.project.findMany({ orderBy: { name: "asc" } }),
     prisma.workOrder.findMany({
-      where: { createdById: session.user.id, assignedUserId: session.user.id },
+      where,
       include: {
         project: { select: { name: true } },
+        createdBy: { select: { name: true } },
+        assignedDept: { select: { name: true } },
+        assignedDiv: { select: { name: true } },
+        assignedTeam: { select: { name: true } },
+        assignedUser: { select: { name: true } },
         children: { select: { id: true } },
       },
       orderBy: [{ status: "asc" }, { priority: "asc" }, { dueDate: "asc" }],
     }),
   ]);
 
-  const projectIds = [...new Set(todos.map((t) => t.projectId))];
+  const projectIds = [...new Set(items.map((t) => t.projectId))];
   const projectWorkOrders = projectIds.length
     ? await prisma.workOrder.findMany({
         where: { projectId: { in: projectIds } },
@@ -37,13 +46,12 @@ export default async function MyTodosPage() {
   const progressMap = computeProgress(projectWorkOrders);
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8">
-      <h1 className="text-xl font-semibold text-slate-900">내 할일</h1>
+    <div className="mx-auto max-w-5xl px-6 py-8">
+      <BackToDashboard />
+      <h1 className="text-xl font-semibold text-slate-900">업무리스트</h1>
       <p className="mt-1 text-sm text-slate-500">
-        직접 만들어 스스로 관리하는 할 일 목록입니다. 다른 사람에게 지시받은
-        업무는 &quot;내 업무&quot;에서 확인하세요.
-        {canDelegate &&
-          " 할 일을 진행하다가 하위 업무로 쪼개어 부서/과원에게 할당할 수 있습니다."}
+        나에게 지시된 업무와 직접 만든 할일을 함께 관리합니다. 각 업무의 지시자
+        · 이관 여부 · 담당을 확인할 수 있습니다.
       </p>
 
       <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
@@ -51,46 +59,48 @@ export default async function MyTodosPage() {
       </div>
 
       <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
-        {todos.length === 0 ? (
-          <p className="text-sm text-slate-400">등록된 할 일이 없습니다.</p>
+        {items.length === 0 ? (
+          <p className="text-sm text-slate-400">표시할 업무가 없습니다.</p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {todos.map((todo) => {
-              const hasChildren = todo.children.length > 0;
+            {items.map((item) => {
+              const hasChildren = item.children.length > 0;
               const progress = hasChildren
-                ? (progressMap.get(todo.id) ?? todo.progress)
-                : todo.progress;
+                ? (progressMap.get(item.id) ?? item.progress)
+                : item.progress;
               return (
                 <li
-                  key={todo.id}
+                  key={item.id}
                   className="flex flex-wrap items-center gap-3 rounded-md border border-slate-100 p-3 hover:border-blue-200"
                 >
-                  <div className="min-w-[200px] flex-1">
+                  <div className="min-w-[220px] flex-1">
                     <Link
-                      href={`/work-orders/${todo.id}`}
+                      href={`/work-orders/${item.id}`}
                       className="text-sm font-medium text-slate-800 hover:text-blue-600"
                     >
-                      {todo.title}
+                      {item.title}
                     </Link>
                     <p className="mt-0.5 text-xs text-slate-400">
-                      {todo.project.name}
-                      {todo.dueDate &&
-                        ` · 마감 ${todo.dueDate.toLocaleDateString("ko-KR")}`}
+                      {item.project.name} · 지시: {item.createdBy.name} · 담당:{" "}
+                      {formatAssignee(item)}
+                      {item.dueDate &&
+                        ` · 마감 ${item.dueDate.toLocaleDateString("ko-KR")}`}
                     </p>
                   </div>
-                  <StatusBadge status={todo.status} />
-                  <PriorityBadge priority={todo.priority} />
+                  <StatusBadge status={item.status} />
+                  <PriorityBadge priority={item.priority} />
+                  <TransferredBadge transferred={item.transferred} />
                   <DelayBadge
-                    dueDate={todo.dueDate}
-                    status={todo.status}
-                    completedAt={todo.completedAt}
+                    dueDate={item.dueDate}
+                    status={item.status}
+                    completedAt={item.completedAt}
                   />
                   <div className="w-32">
                     <ProgressBar value={progress} />
                   </div>
                   {canDelegate && (
                     <Link
-                      href={`/work-orders/new?projectId=${todo.projectId}&parentId=${todo.id}`}
+                      href={`/work-orders/new?projectId=${item.projectId}&parentId=${item.id}`}
                       className="text-xs text-blue-600 hover:underline"
                     >
                       + 하위 업무로 위임

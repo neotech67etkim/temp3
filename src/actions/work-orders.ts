@@ -120,8 +120,7 @@ export async function createMyTodo(formData: FormData) {
     },
   });
 
-  revalidatePath("/my-todos");
-  revalidatePath("/my-tasks");
+  revalidatePath("/work-list");
   revalidatePath("/dashboard");
 }
 
@@ -143,7 +142,7 @@ export async function updateWorkOrderStatus(id: string, formData: FormData) {
   revalidatePath(`/work-orders/${id}`);
   revalidatePath(`/projects/${workOrder.projectId}`);
   revalidatePath("/dashboard");
-  revalidatePath("/my-tasks");
+  revalidatePath("/work-list");
 }
 
 export async function updateWorkOrderProgress(id: string, formData: FormData) {
@@ -172,7 +171,7 @@ export async function updateWorkOrderProgress(id: string, formData: FormData) {
   revalidatePath(`/work-orders/${id}`);
   revalidatePath(`/projects/${workOrder.projectId}`);
   revalidatePath("/dashboard");
-  revalidatePath("/my-tasks");
+  revalidatePath("/work-list");
 }
 
 /** 담당자가 진행 경과(텍스트/스크린샷/참고 파일 경로)를 남긴다. */
@@ -239,7 +238,7 @@ export async function updateWorkOrderPriority(id: string, formData: FormData) {
   revalidatePath(`/work-orders/${id}`);
   revalidatePath(`/projects/${workOrder.projectId}`);
   revalidatePath("/dashboard");
-  revalidatePath("/my-tasks");
+  revalidatePath("/work-list");
 }
 
 /** 개인에게 할당된 업무를 내 권한 범위 안의 다른 사람에게 이관한다. */
@@ -273,7 +272,7 @@ export async function reassignWorkOrder(id: string, formData: FormData) {
   await prisma.$transaction([
     prisma.workOrder.update({
       where: { id },
-      data: { assignedUserId: target.id },
+      data: { assignedUserId: target.id, transferred: true },
     }),
     prisma.workOrderLog.create({
       data: {
@@ -286,8 +285,7 @@ export async function reassignWorkOrder(id: string, formData: FormData) {
 
   revalidatePath("/work-orders");
   revalidatePath(`/work-orders/${id}`);
-  revalidatePath("/my-tasks");
-  revalidatePath("/my-todos");
+  revalidatePath("/work-list");
   revalidatePath("/dashboard");
 }
 
@@ -322,7 +320,7 @@ export async function deleteWorkOrder(formData: FormData) {
 
   revalidatePath("/work-orders");
   revalidatePath("/dashboard");
-  revalidatePath("/my-tasks");
+  revalidatePath("/work-list");
   revalidatePath(`/projects/${workOrder.projectId}`);
   if (workOrder.parentId) revalidatePath(`/work-orders/${workOrder.parentId}`);
   redirect(`/projects/${workOrder.projectId}`);
@@ -352,7 +350,7 @@ export async function createCategory(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const color = String(formData.get("color") ?? "").trim() || null;
 
-  if (!name) throw new Error("카테고리명을 입력하세요.");
+  if (!name) throw new Error("업무영역명을 입력하세요.");
 
   await prisma.category.create({ data: { name, color } });
 

@@ -3,15 +3,18 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { getCategoryProgress, getOrgProgressTree } from "@/lib/dashboard";
 import { computeProgress } from "@/lib/progress";
+import { formatAssignee } from "@/lib/format";
+import { myWorkListWhere } from "@/lib/org-access";
 import { ProgressBar } from "@/components/progress-bar";
 import { StatusBadge } from "@/components/status-badge";
 import { PriorityBadge } from "@/components/priority-badge";
 import { DelayBadge } from "@/components/delay-badge";
+import { TransferredBadge } from "@/components/transferred-badge";
 import { CategoryProgressChart } from "@/components/category-progress-chart";
 import { StatusPieChart } from "@/components/status-pie-chart";
 import { MyTodoForm } from "@/components/my-todo-form";
 
-const MY_TODOS_PREVIEW_LIMIT = 5;
+const WORK_LIST_PREVIEW_LIMIT = 5;
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
@@ -25,7 +28,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
 export default async function DashboardPage() {
   const session = await auth();
 
-  const [categories, orgTree, projects, myTodos] = await Promise.all([
+  const [categories, orgTree, projects, workList] = await Promise.all([
     getCategoryProgress(),
     getOrgProgressTree(),
     session?.user
@@ -33,12 +36,14 @@ export default async function DashboardPage() {
       : Promise.resolve([]),
     session?.user
       ? prisma.workOrder.findMany({
-          where: {
-            createdById: session.user.id,
-            assignedUserId: session.user.id,
-          },
+          where: myWorkListWhere(session.user),
           include: {
             project: { select: { name: true } },
+            createdBy: { select: { name: true } },
+            assignedDept: { select: { name: true } },
+            assignedDiv: { select: { name: true } },
+            assignedTeam: { select: { name: true } },
+            assignedUser: { select: { name: true } },
             children: { select: { id: true } },
           },
           orderBy: [{ status: "asc" }, { priority: "asc" }, { dueDate: "asc" }],
@@ -46,15 +51,19 @@ export default async function DashboardPage() {
       : Promise.resolve([]),
   ]);
 
-  const myTodosProjectIds = [...new Set(myTodos.map((t) => t.projectId))];
-  const myTodosProjectWorkOrders = myTodosProjectIds.length
+  const workListProjectIds = [...new Set(workList.map((t) => t.projectId))];
+  const workListProjectWorkOrders = workListProjectIds.length
     ? await prisma.workOrder.findMany({
-        where: { projectId: { in: myTodosProjectIds } },
+        where: { projectId: { in: workListProjectIds } },
         select: { id: true, parentId: true, progress: true },
       })
     : [];
-  const myTodosProgressMap = computeProgress(myTodosProjectWorkOrders);
-  const myTodosPreview = myTodos.slice(0, MY_TODOS_PREVIEW_LIMIT);
+  const workListProgressMap = computeProgress(workListProjectWorkOrders);
+  const workListPreview = workList.slice(0, WORK_LIST_PREVIEW_LIMIT);
+
+  const myDeptTree = session?.user?.departmentId
+    ? orgTree.filter((d) => d.id === session.user.departmentId)
+    : orgTree;
 
   const totalWorkOrders = categories.reduce(
     (sum, c) => sum + c.totalWorkOrders,
@@ -83,67 +92,63 @@ export default async function DashboardPage() {
     <div className="mx-auto max-w-6xl px-6 py-8">
       <h1 className="text-xl font-semibold text-slate-900">전체 현황 대시보드</h1>
       <p className="mt-1 text-sm text-slate-500">
-        카테고리별 진행률과 조직 단위 업무 현황을 한눈에 확인합니다.
+        내 업무리스트와 과별 진행현황을 먼저 확인하고, 아래에서 전체 현황을
+        살펴보세요.
       </p>
 
-      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="카테고리" value={`${categories.length}개`} />
-        <StatCard label="프로젝트" value={`${totalProjects}개`} />
-        <StatCard label="전체 Work Order" value={`${totalWorkOrders}건`} />
-        <StatCard label="평균 진행률" value={`${avgProgress}%`} />
-      </div>
-
       {session?.user && (
-        <div className="mt-8 rounded-lg border border-slate-200 bg-white p-5">
+        <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-800">내 할일</h2>
-            {myTodos.length > MY_TODOS_PREVIEW_LIMIT && (
+            <h2 className="text-sm font-semibold text-slate-800">
+              내 업무리스트
+            </h2>
+            {workList.length > WORK_LIST_PREVIEW_LIMIT && (
               <Link
-                href="/my-todos"
+                href="/work-list"
                 className="text-xs text-blue-600 hover:underline"
               >
-                전체 보기 ({myTodos.length}건)
+                전체 보기 ({workList.length}건)
               </Link>
             )}
           </div>
 
           <MyTodoForm projects={projects} />
 
-          {myTodosPreview.length === 0 ? (
-            <p className="mt-4 text-sm text-slate-400">
-              등록된 할 일이 없습니다.
-            </p>
+          {workListPreview.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-400">표시할 업무가 없습니다.</p>
           ) : (
             <ul className="mt-4 flex flex-col gap-2">
-              {myTodosPreview.map((todo) => {
-                const hasChildren = todo.children.length > 0;
+              {workListPreview.map((item) => {
+                const hasChildren = item.children.length > 0;
                 const progress = hasChildren
-                  ? (myTodosProgressMap.get(todo.id) ?? todo.progress)
-                  : todo.progress;
+                  ? (workListProgressMap.get(item.id) ?? item.progress)
+                  : item.progress;
                 return (
                   <li
-                    key={todo.id}
+                    key={item.id}
                     className="flex flex-wrap items-center gap-3 rounded-md border border-slate-100 p-3 hover:border-blue-200"
                   >
                     <div className="min-w-[200px] flex-1">
                       <Link
-                        href={`/work-orders/${todo.id}`}
+                        href={`/work-orders/${item.id}`}
                         className="text-sm font-medium text-slate-800 hover:text-blue-600"
                       >
-                        {todo.title}
+                        {item.title}
                       </Link>
                       <p className="mt-0.5 text-xs text-slate-400">
-                        {todo.project.name}
-                        {todo.dueDate &&
-                          ` · 마감 ${todo.dueDate.toLocaleDateString("ko-KR")}`}
+                        {item.project.name} · 지시: {item.createdBy.name} · 담당:{" "}
+                        {formatAssignee(item)}
+                        {item.dueDate &&
+                          ` · 마감 ${item.dueDate.toLocaleDateString("ko-KR")}`}
                       </p>
                     </div>
-                    <StatusBadge status={todo.status} />
-                    <PriorityBadge priority={todo.priority} />
+                    <StatusBadge status={item.status} />
+                    <PriorityBadge priority={item.priority} />
+                    <TransferredBadge transferred={item.transferred} />
                     <DelayBadge
-                      dueDate={todo.dueDate}
-                      status={todo.status}
-                      completedAt={todo.completedAt}
+                      dueDate={item.dueDate}
+                      status={item.status}
+                      completedAt={item.completedAt}
                     />
                     <div className="w-32">
                       <ProgressBar value={progress} />
@@ -156,10 +161,65 @@ export default async function DashboardPage() {
         </div>
       )}
 
+      <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
+        <h2 className="mb-4 text-sm font-semibold text-slate-800">
+          과별 진행현황
+        </h2>
+        {myDeptTree.length === 0 ? (
+          <p className="text-sm text-slate-400">등록된 부서가 없습니다.</p>
+        ) : (
+          <div className="flex flex-col gap-5">
+            {myDeptTree.map((dept) => (
+              <div key={dept.id}>
+                <div className="flex items-center gap-4">
+                  <span className="w-40 shrink-0 text-sm font-medium text-slate-800">
+                    {dept.name}
+                  </span>
+                  <span className="w-20 shrink-0 text-xs text-slate-400">
+                    {dept.workOrderCount}건
+                  </span>
+                  <div className="flex-1">
+                    <ProgressBar value={dept.progress} />
+                  </div>
+                </div>
+                {dept.children.length > 0 && (
+                  <ul className="mt-2 ml-6 flex flex-col gap-2 border-l border-slate-100 pl-4">
+                    {dept.children.map((div) => (
+                      <li key={div.id} className="flex items-center gap-4">
+                        <span className="w-36 shrink-0 text-sm text-slate-600">
+                          {div.name}
+                        </span>
+                        <span className="w-20 shrink-0 text-xs text-slate-400">
+                          {div.workOrderCount}건
+                        </span>
+                        <div className="flex-1">
+                          <ProgressBar value={div.progress} />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <hr className="my-10 border-slate-200" />
+
+      <h2 className="text-lg font-semibold text-slate-900">전체 현황</h2>
+
+      <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatCard label="업무영역" value={`${categories.length}개`} />
+        <StatCard label="프로젝트" value={`${totalProjects}개`} />
+        <StatCard label="전체 Work Order" value={`${totalWorkOrders}건`} />
+        <StatCard label="평균 진행률" value={`${avgProgress}%`} />
+      </div>
+
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-slate-200 bg-white p-5">
           <h2 className="mb-4 text-sm font-semibold text-slate-800">
-            카테고리별 진행률
+            업무영역별 진행률
           </h2>
           <CategoryProgressChart data={chartData} />
         </div>
@@ -173,11 +233,12 @@ export default async function DashboardPage() {
 
       <div className="mt-8 rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="mb-4 text-sm font-semibold text-slate-800">
-          카테고리 상세
+          업무영역 상세
         </h2>
         {categories.length === 0 ? (
           <p className="text-sm text-slate-400">
-            등록된 카테고리가 없습니다. 프로젝트 메뉴에서 카테고리를 먼저 만들어보세요.
+            등록된 업무영역이 없습니다. 프로젝트 메뉴에서 업무영역을 먼저
+            만들어보세요.
           </p>
         ) : (
           <ul className="flex flex-col gap-4">

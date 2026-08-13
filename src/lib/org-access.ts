@@ -122,3 +122,18 @@ export function assignableUsersWhere(
 export function canManageOrg(role: Role): boolean {
   return role === "ADMIN";
 }
+
+/**
+ * "업무리스트"(내 할일 + 내 업무 통합)에 표시할 WorkOrder 범위.
+ * 과장은 개인 할당 업무에 더해 자기 과 단위로 지시된 업무도 함께 본다.
+ */
+export function myWorkListWhere(user: ScopedUser): Prisma.WorkOrderWhereInput {
+  return user.role === "DIV_HEAD" && user.divisionId
+    ? {
+        OR: [
+          { assignedUserId: user.id },
+          { assignedDivId: user.divisionId },
+        ],
+      }
+    : { assignedUserId: user.id };
+}

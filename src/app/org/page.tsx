@@ -12,6 +12,7 @@ import {
 } from "@/actions/org";
 import { UserForm } from "@/components/user-form";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { BackToDashboard } from "@/components/back-to-dashboard";
 
 function DeleteForm({
   action,
@@ -40,6 +41,7 @@ export default async function OrgPage() {
   if (!session?.user || !canManageOrg(session.user.role)) {
     return (
       <div className="mx-auto max-w-6xl px-6 py-8">
+        <BackToDashboard />
         <p className="text-sm text-red-600">조직 관리 권한이 없습니다.</p>
       </div>
     );
@@ -66,6 +68,7 @@ export default async function OrgPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
+      <BackToDashboard />
       <h1 className="text-xl font-semibold text-slate-900">조직 관리</h1>
       <p className="mt-1 text-sm text-slate-500">
         부서 → 과 → 팀 구조를 관리합니다. 과원(사무직)은 과에 소속되고, 팀(현장

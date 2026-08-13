@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { BackToDashboard } from "@/components/back-to-dashboard";
 
 const TOC = [
   { href: "#login", label: "1. 최초 로그인 및 비밀번호 변경" },
@@ -52,6 +52,7 @@ function Note({ children }: { children: React.ReactNode }) {
 export default function GuidePage() {
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
+      <BackToDashboard />
       <h1 className="text-xl font-semibold text-slate-900">이용 안내서</h1>
       <p className="mt-1 text-sm text-slate-500">
         Work Order 관리 시스템을 처음 사용하시는 분들을 위한 안내입니다. 목차를
@@ -133,12 +134,31 @@ export default function GuidePage() {
               부서/과 단위로도 전체 진행 상황을 한눈에 볼 수 있습니다.
             </Step>
           </div>
+          <p>
+            개인에게 할당된 업무는 필요하면 권한 범위 안의 다른 사람에게{" "}
+            <strong>이관(담당자 변경)</strong>할 수 있고, 이관된 업무는 목록에
+            <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-xs text-purple-700">
+              이관됨
+            </span>{" "}
+            배지로 표시됩니다.
+          </p>
         </Section>
 
         <Section id="usage" title="3. 화면별 이용 방법">
           <p>
-            <strong>대시보드</strong> — 카테고리별 진행률, 상태 분포, 부서·과·팀
-            단위 진행 현황을 한눈에 확인합니다.
+            <strong>대시보드</strong> — 로그인 후 첫 화면입니다. 맨 위에{" "}
+            <strong>내 업무리스트</strong>(빠른 할일 추가 포함)와{" "}
+            <strong>과별 진행현황</strong>이 바로 보이고, 그 아래에는 회사
+            전체의 업무영역별 진행률·상태 분포·조직 전체 진행 현황이 이어집니다.
+          </p>
+          <p>
+            <strong>업무리스트</strong> — 나에게 지시된 업무와 직접 만든
+            할일을 한 화면에서 관리합니다. 각 항목에 지시자(본인이 지시자인
+            경우 본인 이름 그대로 표시), 담당자, 이관 여부가 함께 나타납니다.
+            새 할일은 이 화면(또는 대시보드)에서 바로 추가하고, 진행하다가
+            필요하면 &quot;+ 하위 업무로 위임&quot;으로 부서/과원에게 나누어
+            줄 수 있습니다. 상태·우선순위·진행률을 바꾸려면 업무를 클릭해
+            상세 화면에서 변경합니다.
           </p>
           <p>
             <strong>프로젝트</strong> — 프로젝트별로 Work Order 트리(상위-하위
@@ -168,22 +188,17 @@ export default function GuidePage() {
             그 경로를 텍스트로 남겨도 됩니다.
           </p>
           <p>
-            <strong>간트차트</strong> — 부서 또는 특정 과를 선택해 업무별 일정과
-            지연 여부를 막대그래프로 확인합니다.
-          </p>
-          <p>
-            <strong>내 할일</strong> — 다른 사람이 지시한 것과 별개로, 스스로
-            만들어 관리하는 개인 할 일 목록입니다. 진행하다가 하위 업무로
-            쪼개어 부서/과원에게 할당할 수도 있습니다.
-          </p>
-          <p>
-            <strong>내 업무</strong> — 나에게 할당된 업무 목록을 상태·우선순위·
-            진행률과 함께 보여줍니다(목록 자체는 읽기 전용입니다). 값을
-            바꾸려면 업무를 클릭해 상세 화면에서 변경하세요.
+            <strong>간트차트</strong> — 업무별 일정과 지연 여부를 막대그래프로
+            확인합니다. 부서장·과장은 부서 또는 과를 선택해 전체를 볼 수
+            있고, 과원·팀장은 본인이 소속된 과의 내용만 볼 수 있습니다.
           </p>
           <p>
             <strong>조직 관리</strong>(관리자 전용) — 부서/과/팀/사용자를
             추가·삭제하고 조직도를 관리합니다.
+          </p>
+          <p>
+            어느 화면에서든 좌측 상단의 &quot;← 대시보드로&quot;를 누르면 바로
+            대시보드로 돌아갈 수 있습니다.
           </p>
         </Section>
 
@@ -193,7 +208,8 @@ export default function GuidePage() {
               <p className="font-medium text-slate-800">부서장</p>
               <ul className="mt-1 list-disc pl-5">
                 <li>
-                  대시보드·간트차트로 부서 전체 진행 상황을 모니터링합니다.
+                  대시보드·간트차트로 부서 전체(전 과) 진행 상황을
+                  모니터링합니다.
                 </li>
                 <li>
                   업무를 새로 할당할 때 <strong>같은 부서 소속 과장 또는
@@ -210,21 +226,24 @@ export default function GuidePage() {
                   에게만 할당할 수 있습니다.
                 </li>
                 <li>
-                  &quot;내 업무&quot;에는 <strong>과 단위로 지시받은 업무</strong>
-                  와 <strong>본인 개인에게 할당된 업무</strong>가 함께
+                  &quot;업무리스트&quot;에는 <strong>과 단위로 지시받은
+                  업무</strong>와 <strong>본인 개인 업무</strong>가 함께
                   표시되어, 과 전체 업무와 개인 업무를 한 화면에서 확인할 수
                   있습니다.
                 </li>
+                <li>간트차트도 부서장과 동일하게 전체 과를 볼 수 있습니다.</li>
               </ul>
             </div>
             <div>
               <p className="font-medium text-slate-800">과원</p>
               <ul className="mt-1 list-disc pl-5">
-                <li>업무를 새로 만들거나 다른 사람에게 할당할 수 없습니다.</li>
+                <li>다른 사람에게 업무를 할당하거나 이관할 수 없습니다.</li>
                 <li>
-                  &quot;내 업무&quot;에서 본인에게 할당된 업무를 확인하고,
-                  업무를 클릭해 상태·진행률을 갱신하거나 진행 경과를 남깁니다.
+                  &quot;업무리스트&quot;에서 본인에게 할당된 업무와 직접 만든
+                  할일을 확인하고, 업무를 클릭해 상태·진행률을 갱신하거나
+                  진행 경과를 남깁니다.
                 </li>
+                <li>간트차트는 본인이 소속된 과의 내용만 볼 수 있습니다.</li>
               </ul>
             </div>
           </div>
@@ -241,6 +260,7 @@ export default function GuidePage() {
               하위 업무가 있는 업무는 진행률이 하위 업무 평균으로 자동
               계산되므로 직접 입력할 수 없습니다.
             </li>
+            <li>업무 이관 시 이전/이후 담당자와 이관한 사람이 진행 경과에 자동으로 기록됩니다.</li>
             <li>
               업무·조직·계정 삭제는 되돌릴 수 없습니다. 삭제 전에 다시 한 번
               확인하세요.
@@ -256,13 +276,6 @@ export default function GuidePage() {
           </ul>
         </Section>
       </div>
-
-      <p className="mt-6 text-center text-xs text-slate-400">
-        추가로 궁금한 점은 관리자(부서장)에게 문의하세요. ·{" "}
-        <Link href="/dashboard" className="text-blue-600 hover:underline">
-          대시보드로 이동
-        </Link>
-      </p>
     </div>
   );
 }
