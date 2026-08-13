@@ -125,15 +125,21 @@ export function canManageOrg(role: Role): boolean {
 
 /**
  * "업무리스트"(내 할일 + 내 업무 통합)에 표시할 WorkOrder 범위.
- * 과장은 개인 할당 업무에 더해 자기 과 단위로 지시된 업무도 함께 본다.
+ * 조직 단위(부서/과/팀)로 할당된 업무는 그 조직을 이끄는 개인(부서장/과장/팀장)에게
+ * 할당된 것과 동일하게 취급한다 — 결국 과로 할당된 업무는 과장 개인 업무와 같다.
  */
 export function myWorkListWhere(user: ScopedUser): Prisma.WorkOrderWhereInput {
-  return user.role === "DIV_HEAD" && user.divisionId
-    ? {
-        OR: [
-          { assignedUserId: user.id },
-          { assignedDivId: user.divisionId },
-        ],
-      }
-    : { assignedUserId: user.id };
+  const clauses: Prisma.WorkOrderWhereInput[] = [{ assignedUserId: user.id }];
+
+  if (user.role === "DEPT_HEAD" && user.departmentId) {
+    clauses.push({ assignedDeptId: user.departmentId });
+  }
+  if (user.role === "DIV_HEAD" && user.divisionId) {
+    clauses.push({ assignedDivId: user.divisionId });
+  }
+  if (user.role === "TEAM_LEAD" && user.teamId) {
+    clauses.push({ assignedTeamId: user.teamId });
+  }
+
+  return clauses.length > 1 ? { OR: clauses } : clauses[0];
 }
