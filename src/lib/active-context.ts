@@ -3,13 +3,14 @@
  * 하나로 묶은 상위 레벨 API. Electron 화면(또는 테스트)이 실제로 호출하게 될 진입점.
  */
 
-import { NasStore, type AcquireResult } from "./nas-store";
+import { NasStore, type LockInfo } from "./nas-store";
 import { syncOrgInto } from "./org-sync";
 import { setActiveDb, clearActiveDb, orgDb } from "./db";
+export { getActiveContextInfo, type ActiveContextInfo } from "./db";
 
 export type OpenForEditResult =
   | { ok: true }
-  | { ok: false; reason: "locked" | "stale"; lock: AcquireResult extends { lock: infer L } ? L : never };
+  | { ok: false; reason: "locked" | "stale"; lock: LockInfo };
 
 export class ActiveContext {
   constructor(
@@ -30,7 +31,7 @@ export class ActiveContext {
     if (!localPath) throw new Error("체크아웃에 실패했습니다(localPath 없음).");
 
     await syncOrgInto(this.orgDbPath(), localPath, this.migrationsDir);
-    setActiveDb(localPath);
+    setActiveDb(localPath, key, "edit");
     return { ok: true };
   }
 
@@ -57,7 +58,7 @@ export class ActiveContext {
       throw new Error(`아직 생성된 적 없는 과입니다: ${key}`);
     }
     await syncOrgInto(this.orgDbPath(), localPath, this.migrationsDir);
-    setActiveDb(localPath);
+    setActiveDb(localPath, key, "readonly");
   }
 
   /** 현재 잠금 상태 조회(편집 시작 전 UI에 "○○님이 편집 중" 표시용). */

@@ -1,5 +1,7 @@
 import { auth } from "@/auth";
-import { prisma } from "@/lib/db";
+import { orgDb } from "@/lib/db";
+import { getNasStore, getMigrationsDir } from "@/lib/app-config";
+import { allStoreKeys, findWorkOrderById } from "@/lib/work-order-tree";
 import {
   assignableTypesFor,
   assignableUsersWhere,
@@ -28,29 +30,32 @@ export default async function NewWorkOrderPage({
   const isAdmin = session.user.role === "ADMIN";
   const allowedTypes = assignableTypesFor(session.user.role);
 
-  const [projects, departments, divisions, teams, users, parent] =
-    await Promise.all([
-      prisma.project.findMany({ orderBy: { name: "asc" } }),
-      isAdmin
-        ? prisma.department.findMany({ orderBy: { name: "asc" } })
-        : Promise.resolve([]),
-      isAdmin
-        ? prisma.division.findMany({ orderBy: { name: "asc" } })
-        : Promise.resolve([]),
-      isAdmin
-        ? prisma.team.findMany({ orderBy: { name: "asc" } })
-        : Promise.resolve([]),
-      prisma.user.findMany({
-        where: assignableUsersWhere(session.user),
-        orderBy: { name: "asc" },
-      }),
-      parentId
-        ? prisma.workOrder.findUnique({
-            where: { id: parentId },
-            select: { title: true },
-          })
-        : Promise.resolve(null),
-    ]);
+  const [projects, departments, divisions, teams, users] = await Promise.all([
+    orgDb.project.findMany({ orderBy: { name: "asc" } }),
+    isAdmin
+      ? orgDb.department.findMany({ orderBy: { name: "asc" } })
+      : Promise.resolve([]),
+    isAdmin
+      ? orgDb.division.findMany({ orderBy: { name: "asc" } })
+      : Promise.resolve([]),
+    isAdmin
+      ? orgDb.team.findMany({ orderBy: { name: "asc" } })
+      : Promise.resolve([]),
+    orgDb.user.findMany({
+      where: assignableUsersWhere(session.user),
+      orderBy: { name: "asc" },
+    }),
+  ]);
+
+  let parent: { title: string } | null = null;
+  if (parentId) {
+    const store = getNasStore();
+    const migrationsDir = getMigrationsDir();
+    const allDivisions = await orgDb.division.findMany({ select: { name: true } });
+    const divisionKeys = allStoreKeys(allDivisions.map((d) => d.name));
+    const located = await findWorkOrderById(store, divisionKeys, migrationsDir, parentId);
+    parent = located ? { title: located.workOrder.title } : null;
+  }
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-8">

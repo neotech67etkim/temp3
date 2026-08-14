@@ -220,6 +220,67 @@ export async function getWorkOrderDetail(
   }
 }
 
+export type CascadeUpdateResult =
+  | { ok: true }
+  | { ok: false; blockedKey: string; lock: LockInfo };
+
+/**
+ * 루트 업무의 프로젝트가 바뀔 때, 여러 과 파일에 흩어진 하위 업무들의
+ * projectId도 함께 맞춰준다. alreadyHeldKeys(현재 편집 세션이 이미 잠그고
+ * 있는 키)는 다시 잠그려 하지 않고 바로 갱신한다 - 그 외의 키는 새로 잠금을
+ * 확보해야 하며, 하나라도 실패하면 아무것도 바꾸지 않는다.
+ */
+export async function updateDescendantsProjectId(
+  store: NasStore,
+  divisionKeys: string[],
+  migrationsDir: string,
+  rootId: string,
+  newProjectId: string,
+  alreadyHeldKeys: string[],
+  holder: { name: string; email: string },
+): Promise<CascadeUpdateResult> {
+  const descendants = await getDescendants(store, divisionKeys, migrationsDir, rootId);
+  if (descendants.length === 0) return { ok: true };
+
+  const idsByKey = new Map<string, string[]>();
+  for (const item of descendants) {
+    if (!idsByKey.has(item.key)) idsByKey.set(item.key, []);
+    idsByKey.get(item.key)!.push(item.workOrder.id);
+  }
+  const keys = [...idsByKey.keys()];
+  const keysToAcquire = keys.filter((k) => !alreadyHeldKeys.includes(k));
+
+  const acquired: string[] = [];
+  for (const key of keysToAcquire) {
+    const { result } = store.checkoutForEdit(key, holder);
+    if (!result.ok) {
+      for (const acquiredKey of acquired) store.discardEdit(acquiredKey);
+      return { ok: false, blockedKey: key, lock: result.lock };
+    }
+    acquired.push(key);
+  }
+
+  for (const key of keys) {
+    const localPath = store.localDbPath(key);
+    await ensureSchema(localPath, migrationsDir);
+    const client = new PrismaClient({ datasourceUrl: `file:${localPath}` });
+    try {
+      await client.workOrder.updateMany({
+        where: { id: { in: idsByKey.get(key)! } },
+        data: { projectId: newProjectId },
+      });
+    } finally {
+      await client.$disconnect();
+    }
+  }
+
+  for (const key of keysToAcquire) {
+    store.checkinAfterEdit(key);
+  }
+
+  return { ok: true };
+}
+
 export type CascadeDeleteResult =
   | { ok: true; deletedCount: number }
   | { ok: false; blockedKey: string; lock: LockInfo };

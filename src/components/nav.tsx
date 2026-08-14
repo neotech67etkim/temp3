@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import { ROLE_LABEL, canManageOrg } from "@/lib/org-access";
+import { getActiveContextInfo } from "@/lib/db";
+import { endEditSession } from "@/actions/context";
 
 export async function Nav() {
   const session = await auth();
@@ -17,6 +19,8 @@ export async function Nav() {
     { href: "/account", label: "내 계정" },
     { href: "/guide", label: "이용 안내" },
   ];
+
+  const context = getActiveContextInfo();
 
   return (
     <header className="border-b border-slate-200 bg-white">
@@ -38,6 +42,34 @@ export async function Nav() {
           </nav>
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-500">
+          {context && context.mode === "edit" ? (
+            <form action={endEditSession} className="flex items-center gap-2">
+              <span className="rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">
+                편집 중: {context.key}
+              </span>
+              <button
+                name="mode"
+                value="save"
+                className="text-xs text-blue-600 hover:underline"
+              >
+                저장하고 종료
+              </button>
+              <button
+                name="mode"
+                value="discard"
+                className="text-xs text-slate-400 hover:text-red-600"
+              >
+                취소
+              </button>
+            </form>
+          ) : (
+            <Link
+              href="/select-division"
+              className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600 hover:bg-slate-200"
+            >
+              편집 시작
+            </Link>
+          )}
           <span>
             {session.user.name} ·{" "}
             {ROLE_LABEL[session.user.role] ?? session.user.role}

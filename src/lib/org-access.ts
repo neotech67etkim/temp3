@@ -123,6 +123,40 @@ export function canManageOrg(role: Role): boolean {
   return role === "ADMIN";
 }
 
+export const DEPT_COMMON_LABEL = "부서 공통";
+
+/**
+ * 이 사용자가 "편집 모드"로 체크아웃할 수 있는 과(파일 키) 목록을 정한다.
+ * deptCommonKey는 work-order-tree.ts의 DEPT_COMMON_KEY를 그대로 넘겨받는다
+ * (org-access.ts는 저장소 구현을 몰라도 되게 하기 위해 상수를 여기 두지 않음).
+ * - ADMIN: 전체 과 + 부서 공통
+ * - DEPT_HEAD: 자기 부서 소속 과 전체 + 부서 공통
+ * - DIV_HEAD/TEAM_LEAD/MEMBER: 자기 소속 과 하나만
+ */
+export function editableDivisionKeysFor(
+  user: ScopedUser,
+  allDivisions: Array<{ id: string; name: string; departmentId: string }>,
+  deptCommonKey: string,
+): { key: string; label: string }[] {
+  if (user.role === "ADMIN") {
+    return [
+      { key: deptCommonKey, label: DEPT_COMMON_LABEL },
+      ...allDivisions.map((d) => ({ key: d.name, label: d.name })),
+    ];
+  }
+  if (user.role === "DEPT_HEAD") {
+    if (!user.departmentId) return [];
+    return [
+      { key: deptCommonKey, label: DEPT_COMMON_LABEL },
+      ...allDivisions
+        .filter((d) => d.departmentId === user.departmentId)
+        .map((d) => ({ key: d.name, label: d.name })),
+    ];
+  }
+  const own = allDivisions.find((d) => d.id === user.divisionId);
+  return own ? [{ key: own.name, label: own.name }] : [];
+}
+
 /**
  * "업무리스트"(내 할일 + 내 업무 통합)에 표시할 WorkOrder 범위.
  * 조직 단위(부서/과/팀)로 할당된 업무는 그 조직을 이끄는 개인(부서장/과장/팀장)에게

@@ -10,10 +10,14 @@ import { PrismaClient } from "@prisma/client";
  *   (division-scoped 코드를 한 줄도 안 건드리기 위한 핵심 트릭)
  */
 
+export type ActiveMode = "edit" | "readonly";
+
 const globalForDb = globalThis as unknown as {
   __orgDb: PrismaClient | undefined;
   __activeClient: PrismaClient | undefined;
   __activeDbPath: string | undefined;
+  __activeKey: string | undefined;
+  __activeMode: ActiveMode | undefined;
 };
 
 function resolveOrgDbPath(): string {
@@ -40,9 +44,11 @@ if (process.env.NODE_ENV !== "production") {
   globalForDb.__orgDb = orgDb;
 }
 
-/** 현재 활성화된(체크아웃된) 과 파일 경로를 바꾼다. 같은 경로면 아무것도 안 함. */
-export function setActiveDb(dbPath: string): void {
+/** 현재 활성화된(체크아웃된) 과 파일 경로/키/모드를 바꾼다. 같은 경로면 아무것도 안 함. */
+export function setActiveDb(dbPath: string, key: string, mode: ActiveMode): void {
   if (globalForDb.__activeDbPath === dbPath && globalForDb.__activeClient) {
+    globalForDb.__activeKey = key;
+    globalForDb.__activeMode = mode;
     return;
   }
   const old = globalForDb.__activeClient;
@@ -50,6 +56,8 @@ export function setActiveDb(dbPath: string): void {
     datasourceUrl: `file:${dbPath}`,
   });
   globalForDb.__activeDbPath = dbPath;
+  globalForDb.__activeKey = key;
+  globalForDb.__activeMode = mode;
   if (old) {
     void old.$disconnect();
   }
@@ -59,10 +67,20 @@ export function getActiveDbPath(): string | null {
   return globalForDb.__activeDbPath ?? null;
 }
 
+export type ActiveContextInfo = { key: string; mode: ActiveMode };
+
+/** 현재 어떤 과를 어떤 모드(편집/보기)로 열어 두었는지. 아무것도 안 열려 있으면 null. */
+export function getActiveContextInfo(): ActiveContextInfo | null {
+  if (!globalForDb.__activeKey || !globalForDb.__activeMode) return null;
+  return { key: globalForDb.__activeKey, mode: globalForDb.__activeMode };
+}
+
 export function clearActiveDb(): void {
   const old = globalForDb.__activeClient;
   globalForDb.__activeClient = undefined;
   globalForDb.__activeDbPath = undefined;
+  globalForDb.__activeKey = undefined;
+  globalForDb.__activeMode = undefined;
   if (old) void old.$disconnect();
 }
 
