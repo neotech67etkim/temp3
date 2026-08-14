@@ -36,13 +36,31 @@ export function resolveOrgDbPath(): string {
   );
 }
 
-export const orgDb: PrismaClient =
-  globalForDb.__orgDb ??
-  new PrismaClient({ datasourceUrl: `file:${resolveOrgDbPath()}` });
-
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.__orgDb = orgDb;
+function getOrgDbClient(): PrismaClient {
+  if (!globalForDb.__orgDb) {
+    // resolveOrgDbPath()는 NAS_ROOT 등 런타임 환경변수가 필요한데, 이걸 여기
+    // getter 안에서(=실제로 쿼리를 처음 날릴 때)만 호출해야 한다. 만약 모듈
+    // 최상단에서 즉시 호출하면, `next build`가 라우트 모듈을 그냥 import만
+    // 해도(핸들러를 실행하지 않아도) 이 코드가 평가되면서 "환경변수가 없다"는
+    // 에러로 빌드 자체가 깨진다(실제로 한 번 발생했던 문제).
+    globalForDb.__orgDb = new PrismaClient({
+      datasourceUrl: `file:${resolveOrgDbPath()}`,
+    });
+  }
+  return globalForDb.__orgDb;
 }
+
+/**
+ * 조직도 원본(org.db)에 항상 고정으로 연결되는 클라이언트. 실제 PrismaClient는
+ * 첫 사용 시점에만 만들어진다(위 이유).
+ */
+export const orgDb: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, prop, receiver) {
+    const client = getOrgDbClient();
+    const value = Reflect.get(client, prop, receiver);
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+});
 
 /** 현재 활성화된(체크아웃된) 과 파일 경로/키/모드를 바꾼다. 같은 경로면 아무것도 안 함. */
 export function setActiveDb(dbPath: string, key: string, mode: ActiveMode): void {
