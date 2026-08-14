@@ -1,7 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/db";
+import { orgDb } from "@/lib/db";
+import { getNasStore, getMigrationsDir } from "@/lib/app-config";
+import {
+  allStoreKeys,
+  findWorkOrderById,
+  getChildren,
+  getProjectWorkOrders,
+  getWorkOrderDetail,
+} from "@/lib/work-order-tree";
 import { computeProgress } from "@/lib/progress";
 import { assignableUsersWhere, canManageWorkOrders } from "@/lib/org-access";
 import { formatAssignee } from "@/lib/format";
@@ -30,43 +38,34 @@ export default async function WorkOrderDetailPage({
   const session = await auth();
   if (!session?.user) return null;
 
-  const workOrder = await prisma.workOrder.findUnique({
-    where: { id },
-    include: {
-      project: true,
-      parent: { select: { id: true, title: true } },
-      children: {
-        include: {
-          assignedDept: { select: { name: true } },
-          assignedDiv: { select: { name: true } },
-          assignedTeam: { select: { name: true } },
-          assignedUser: { select: { name: true } },
-        },
-      },
-      assignedDept: { select: { name: true } },
-      assignedDiv: { select: { name: true } },
-      assignedTeam: { select: { name: true } },
-      assignedUser: { select: { name: true } },
-      createdBy: { select: { name: true } },
-      logs: {
-        include: { author: { select: { name: true } } },
-        orderBy: { createdAt: "desc" },
-      },
-    },
-  });
+  const store = getNasStore();
+  const migrationsDir = getMigrationsDir();
+  const divisions = await orgDb.division.findMany({ select: { name: true } });
+  const divisionKeys = allStoreKeys(divisions.map((d) => d.name));
 
+  const workOrder = await getWorkOrderDetail(store, divisionKeys, migrationsDir, id);
   if (!workOrder) notFound();
 
-  const projectWorkOrders = await prisma.workOrder.findMany({
-    where: { projectId: workOrder.projectId },
-    select: { id: true, parentId: true, progress: true },
-  });
+  const [parentLocated, children, projectWorkOrdersLocated] = await Promise.all([
+    workOrder.parentId
+      ? findWorkOrderById(store, divisionKeys, migrationsDir, workOrder.parentId)
+      : Promise.resolve(null),
+    getChildren(store, divisionKeys, migrationsDir, workOrder.id),
+    getProjectWorkOrders(store, divisionKeys, migrationsDir, workOrder.projectId),
+  ]);
+  const parent = parentLocated?.workOrder ?? null;
+
+  const projectWorkOrders = projectWorkOrdersLocated.map((r) => ({
+    id: r.workOrder.id,
+    parentId: r.workOrder.parentId,
+    progress: r.workOrder.progress,
+  }));
   const progressMap = computeProgress(projectWorkOrders);
   const rollupProgress = progressMap.get(workOrder.id) ?? workOrder.progress;
 
   const canManage = canManageWorkOrders(session.user.role);
   const isAssignedToMe = workOrder.assignedUserId === session.user.id;
-  const hasChildren = workOrder.children.length > 0;
+  const hasChildren = children.length > 0;
 
   const canDirectAssign =
     canManage &&
@@ -80,14 +79,14 @@ export default async function WorkOrderDetailPage({
         workOrder.assignedDivId === session.user.divisionId));
 
   const transferCandidates = canDirectAssign
-    ? await prisma.user.findMany({
+    ? await orgDb.user.findMany({
         where: assignableUsersWhere(session.user),
         orderBy: { name: "asc" },
       })
     : [];
 
   const projects = canManage
-    ? await prisma.project.findMany({ orderBy: { name: "asc" } })
+    ? await orgDb.project.findMany({ orderBy: { name: "asc" } })
     : [];
 
   return (
@@ -100,12 +99,12 @@ export default async function WorkOrderDetailPage({
         >
           ← {workOrder.project.name}
         </Link>
-        {workOrder.parent && (
+        {parent && (
           <Link
-            href={`/work-orders/${workOrder.parent.id}`}
+            href={`/work-orders/${parent.id}`}
             className="hover:text-blue-600"
           >
-            ↳ 상위 업무: {workOrder.parent.title}
+            ↳ 상위 업무: {parent.title}
           </Link>
         )}
       </div>
@@ -252,11 +251,11 @@ export default async function WorkOrderDetailPage({
             </Link>
           )}
         </div>
-        {workOrder.children.length === 0 ? (
+        {children.length === 0 ? (
           <p className="text-sm text-slate-400">하위 업무가 없습니다.</p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {workOrder.children.map((child) => (
+            {children.map(({ workOrder: child }) => (
               <li
                 key={child.id}
                 className="flex items-center gap-3 rounded-md border border-slate-100 p-3 hover:border-blue-200"

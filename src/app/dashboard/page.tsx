@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/db";
+import { orgDb } from "@/lib/db";
+import { getNasStore, getMigrationsDir } from "@/lib/app-config";
+import { allStoreKeys } from "@/lib/work-order-tree";
+import { queryAllDivisions } from "@/lib/multi-division-query";
 import { getCategoryProgress, getOrgProgressTree } from "@/lib/dashboard";
 import { computeProgress } from "@/lib/progress";
 import { formatAssignee } from "@/lib/format";
@@ -31,49 +34,78 @@ export default async function DashboardPage() {
     ? canManageWorkOrders(session.user.role)
     : false;
 
-  const [categories, orgTree, projects, workList] = await Promise.all([
-    getCategoryProgress(),
-    getOrgProgressTree(),
+  const store = getNasStore();
+  const migrationsDir = getMigrationsDir();
+  const divisions = await orgDb.division.findMany({ select: { name: true } });
+  const divisionKeys = allStoreKeys(divisions.map((d) => d.name));
+
+  const [categories, orgTree, projects, workListResults] = await Promise.all([
+    getCategoryProgress(store, divisionKeys, migrationsDir),
+    getOrgProgressTree(store, divisionKeys, migrationsDir),
     session?.user
-      ? prisma.project.findMany({ orderBy: { name: "asc" } })
+      ? orgDb.project.findMany({ orderBy: { name: "asc" } })
       : Promise.resolve([]),
     session?.user
-      ? prisma.workOrder.findMany({
-          where: myWorkListWhere(session.user),
-          include: {
-            project: { select: { name: true } },
-            createdBy: { select: { name: true } },
-            assignedDept: { select: { name: true } },
-            assignedDiv: { select: { name: true } },
-            assignedTeam: { select: { name: true } },
-            assignedUser: { select: { name: true } },
-            children: { select: { id: true } },
-          },
-          orderBy: [{ status: "asc" }, { priority: "asc" }, { dueDate: "asc" }],
-        })
+      ? queryAllDivisions(store, divisionKeys, migrationsDir, (client) =>
+          client.workOrder.findMany({
+            where: myWorkListWhere(session.user),
+            include: {
+              project: { select: { name: true } },
+              createdBy: { select: { name: true } },
+              assignedDept: { select: { name: true } },
+              assignedDiv: { select: { name: true } },
+              assignedTeam: { select: { name: true } },
+              assignedUser: { select: { name: true } },
+            },
+          }),
+        )
       : Promise.resolve([]),
   ]);
 
+  const workList = workListResults
+    .flatMap((r) => r.value)
+    .sort((a, b) => {
+      if (a.status !== b.status) return a.status.localeCompare(b.status);
+      if (a.priority !== b.priority) return a.priority.localeCompare(b.priority);
+      const aDue = a.dueDate?.getTime() ?? Infinity;
+      const bDue = b.dueDate?.getTime() ?? Infinity;
+      return aDue - bDue;
+    });
+
   const recentLogs = session?.user
-    ? await prisma.workOrderLog.findMany({
-        where: { workOrder: myWorkListWhere(session.user) },
-        include: {
-          author: { select: { name: true } },
-          workOrder: { select: { id: true, title: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: RECENT_LOG_LIMIT,
-      })
+    ? (
+        await queryAllDivisions(store, divisionKeys, migrationsDir, (client) =>
+          client.workOrderLog.findMany({
+            where: { workOrder: myWorkListWhere(session.user) },
+            include: {
+              author: { select: { name: true } },
+              workOrder: { select: { id: true, title: true } },
+            },
+            orderBy: { createdAt: "desc" },
+            take: RECENT_LOG_LIMIT,
+          }),
+        )
+      )
+        .flatMap((r) => r.value)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .slice(0, RECENT_LOG_LIMIT)
     : [];
 
   const workListProjectIds = [...new Set(workList.map((t) => t.projectId))];
   const workListProjectWorkOrders = workListProjectIds.length
-    ? await prisma.workOrder.findMany({
-        where: { projectId: { in: workListProjectIds } },
-        select: { id: true, parentId: true, progress: true },
-      })
+    ? (
+        await queryAllDivisions(store, divisionKeys, migrationsDir, (client) =>
+          client.workOrder.findMany({
+            where: { projectId: { in: workListProjectIds } },
+            select: { id: true, parentId: true, progress: true },
+          }),
+        )
+      ).flatMap((r) => r.value)
     : [];
   const workListProgressMap = computeProgress(workListProjectWorkOrders);
+  const childParentIds = new Set(
+    workListProjectWorkOrders.map((w) => w.parentId).filter((id): id is string => !!id),
+  );
 
   const myDeptTree = session?.user?.departmentId
     ? orgTree.filter((d) => d.id === session.user.departmentId)
@@ -123,7 +155,7 @@ export default async function DashboardPage() {
           ) : (
             <ul className="mt-4 flex flex-col gap-2">
               {workList.map((item) => {
-                const hasChildren = item.children.length > 0;
+                const hasChildren = childParentIds.has(item.id);
                 const progress = hasChildren
                   ? (workListProgressMap.get(item.id) ?? item.progress)
                   : item.progress;

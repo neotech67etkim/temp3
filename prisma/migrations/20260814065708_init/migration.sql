@@ -85,7 +85,6 @@ CREATE TABLE "WorkOrder" (
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "WorkOrder_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "WorkOrder_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "WorkOrder" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "WorkOrder_assignedDeptId_fkey" FOREIGN KEY ("assignedDeptId") REFERENCES "Department" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT "WorkOrder_assignedDivId_fkey" FOREIGN KEY ("assignedDivId") REFERENCES "Division" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT "WorkOrder_assignedTeamId_fkey" FOREIGN KEY ("assignedTeamId") REFERENCES "Team" ("id") ON DELETE SET NULL ON UPDATE CASCADE,

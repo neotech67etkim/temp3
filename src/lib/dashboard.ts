@@ -1,5 +1,7 @@
-import { prisma } from "@/lib/db";
+import { orgDb } from "@/lib/db";
 import { computeProgress } from "@/lib/progress";
+import type { NasStore } from "@/lib/nas-store";
+import { queryAllDivisions } from "@/lib/multi-division-query";
 
 export type CategoryProgress = {
   id: string;
@@ -11,27 +13,30 @@ export type CategoryProgress = {
   statusCounts: Record<string, number>;
 };
 
-export async function getCategoryProgress(): Promise<CategoryProgress[]> {
-  const categories = await prisma.category.findMany({
-    include: {
-      projects: {
-        include: {
-          workOrders: {
-            select: {
-              id: true,
-              parentId: true,
-              progress: true,
-              status: true,
-            },
-          },
-        },
-      },
-    },
+export async function getCategoryProgress(
+  store: NasStore,
+  divisionKeys: string[],
+  migrationsDir: string,
+): Promise<CategoryProgress[]> {
+  const categories = await orgDb.category.findMany({
+    include: { projects: true },
     orderBy: { createdAt: "asc" },
   });
 
+  const results = await queryAllDivisions(store, divisionKeys, migrationsDir, (client) =>
+    client.workOrder.findMany({
+      select: { id: true, parentId: true, progress: true, status: true, projectId: true },
+    }),
+  );
+  const allWorkOrders = results.flatMap((r) => r.value);
+  const byProject = new Map<string, typeof allWorkOrders>();
+  for (const wo of allWorkOrders) {
+    if (!byProject.has(wo.projectId)) byProject.set(wo.projectId, []);
+    byProject.get(wo.projectId)!.push(wo);
+  }
+
   return categories.map((category) => {
-    const allNodes = category.projects.flatMap((p) => p.workOrders);
+    const allNodes = category.projects.flatMap((p) => byProject.get(p.id) ?? []);
     const progressMap = computeProgress(allNodes);
     const roots = allNodes.filter((n) => !n.parentId);
     const overall = roots.length
@@ -70,34 +75,41 @@ export type OrgProgressNode = {
  * 부서 > 과 > 팀 단위로 할당된 WorkOrder들의 진행률을 집계한다.
  * 특정 단계(부서/과/팀/개인)에 할당된 업무는 그 상위 조직 단계까지 누적 반영된다.
  */
-export async function getOrgProgressTree(): Promise<OrgProgressNode[]> {
-  const [departments, workOrders] = await Promise.all([
-    prisma.department.findMany({
+export async function getOrgProgressTree(
+  store: NasStore,
+  divisionKeys: string[],
+  migrationsDir: string,
+): Promise<OrgProgressNode[]> {
+  const [departments, results] = await Promise.all([
+    orgDb.department.findMany({
       include: { divisions: { include: { teams: true } } },
       orderBy: { name: "asc" },
     }),
-    prisma.workOrder.findMany({
-      select: {
-        id: true,
-        parentId: true,
-        progress: true,
-        assignedDeptId: true,
-        assignedDivId: true,
-        assignedTeamId: true,
-        assignedUserId: true,
-        assignedUser: {
-          select: { departmentId: true, divisionId: true, teamId: true },
-        },
-        assignedTeam: {
-          select: {
-            divisionId: true,
-            division: { select: { departmentId: true } },
+    queryAllDivisions(store, divisionKeys, migrationsDir, (client) =>
+      client.workOrder.findMany({
+        select: {
+          id: true,
+          parentId: true,
+          progress: true,
+          assignedDeptId: true,
+          assignedDivId: true,
+          assignedTeamId: true,
+          assignedUserId: true,
+          assignedUser: {
+            select: { departmentId: true, divisionId: true, teamId: true },
           },
+          assignedTeam: {
+            select: {
+              divisionId: true,
+              division: { select: { departmentId: true } },
+            },
+          },
+          assignedDiv: { select: { departmentId: true } },
         },
-        assignedDiv: { select: { departmentId: true } },
-      },
-    }),
+      }),
+    ),
   ]);
+  const workOrders = results.flatMap((r) => r.value);
 
   const progressMap = computeProgress(workOrders);
 

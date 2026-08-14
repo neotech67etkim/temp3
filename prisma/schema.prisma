@@ -135,9 +135,11 @@ model WorkOrder {
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  /// 상위 업무 id. DB 레벨 FK가 아닌 "느슨한 참조"다 - 부서 전체에 걸친 상위 업무는
+  /// 서로 다른 과 파일에 있는 하위 업무를 가질 수 있어(과별 파일 분리 구조),
+  /// SQLite가 파일 경계를 넘는 참조무결성을 보장할 수 없기 때문. 상위/하위 조회는
+  /// src/lib/work-order-tree.ts가 여러 과 파일을 훑어서 애플리케이션 레벨로 처리한다.
   parentId String?
-  parent   WorkOrder?  @relation("WOHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
-  children WorkOrder[] @relation("WOHierarchy")
 
   assigneeType AssigneeType
 
