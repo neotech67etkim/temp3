@@ -186,16 +186,27 @@ function waitForServer(port, timeoutMs = 30000) {
 }
 
 function startNextServer(env) {
-  const nextBin = path.join(APP_ROOT, "node_modules", ".bin", "next");
-  serverProcess = spawn(process.execPath, [nextBin, "start", "-p", String(PORT)], {
+  // node_modules/.bin/next는 npm이 만드는 셸 셔림(shim)이라 OS/npm 버전에
+  // 따라 확장자 없는 파일이 아예 없을 수 있다(Windows는 .cmd/.ps1만 만드는
+  // 경우가 흔함). 그 셔림을 거치지 않고, next 패키지의 실제 진입 스크립트를
+  // 직접 node로 실행하면 플랫폼과 무관하게 항상 동작한다.
+  const nextCli = path.join(APP_ROOT, "node_modules", "next", "dist", "bin", "next");
+  serverProcess = spawn(process.execPath, [nextCli, "start", "-p", String(PORT)], {
     cwd: APP_ROOT,
     env: { ...process.env, ...env },
     stdio: "pipe",
   });
+  // 중요: child_process의 "error" 이벤트를 처리하는 리스너가 하나도 없으면,
+  // Node는 이걸 처리되지 않은 예외로 취급해서 Electron 메인 프로세스 전체를
+  // 그 자리에서 죽여버린다(창도, 에러 대화상자도 없이 그냥 꺼짐) - 실제로
+  // 겪은 증상과 일치. 반드시 리스너를 달아서 이 크래시를 막아야 한다.
+  serverProcess.on("error", (err) => {
+    console.error(`[next] 서버 프로세스를 시작하지 못함: ${err.message}`);
+  });
   serverProcess.stdout.on("data", (d) => console.log(`[next] ${d}`));
   serverProcess.stderr.on("data", (d) => console.error(`[next] ${d}`));
-  serverProcess.on("exit", (code) => {
-    console.log(`Next 서버가 종료됨 (code ${code})`);
+  serverProcess.on("exit", (code, signal) => {
+    console.log(`Next 서버가 종료됨 (code ${code}, signal ${signal})`);
   });
 }
 
