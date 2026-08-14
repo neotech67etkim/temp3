@@ -2,8 +2,12 @@
 // 조직 계층: Department(부서) -> Division(과) -> Team(팀) -> User(개인)
 // 업무 계층: Category(카테고리) -> Project(공통 프로젝트) -> WorkOrder(업무지시, 자기참조 트리)
 
+// binaryTargets: 개발은 이 Linux 샌드박스에서, 실제 배포는 회사 Windows PC에서
+// 실행되므로 두 플랫폼의 쿼리 엔진 바이너리를 모두 받아둔다("native"가 이 샌드박스,
+// "windows"가 실제 배포 대상).
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "windows"]
 }
 
 datasource db {

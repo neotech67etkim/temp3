@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Electron 메인 프로세스는 CommonJS(require)로 작성된 별도 런타임 코드라서 제외.
+    "electron/**",
   ]),
 ]);
 

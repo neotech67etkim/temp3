@@ -2,16 +2,48 @@
   "name": "temp3",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev -p 4200",
     "build": "next build",
     "start": "next start -p 4200",
     "lint": "eslint",
     "db:migrate": "prisma migrate deploy",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "electron:start": "electron .",
+    "dist:win": "npm run build && electron-builder --win"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
+  },
+  "build": {
+    "appId": "com.hyundai-marine.workorder",
+    "productName": "WorkOrder",
+    "asar": false,
+    "files": [
+      "electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": ".",
+        "to": "app",
+        "filter": [
+          "package.json",
+          ".next/**/*",
+          "node_modules/**/*",
+          "public/**/*",
+          "prisma/**/*",
+          "next.config.ts"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
@@ -29,6 +61,8 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
     "tailwindcss": "^4",

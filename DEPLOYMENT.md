@@ -1,85 +1,86 @@
-# 보안영역 배포 가이드
+# 배포 가이드 (Electron + NAS 공유 폴더 구조)
 
-이 프로젝트는 **개발은 Git, 운영은 회사 보안영역 내부 서버**라는 원칙으로 배포합니다. Git 저장소에는 코드와 DB 스키마(구조)만 존재하고, 실제 업무 데이터는 보안영역 내부 PostgreSQL에만 저장되어 절대 외부(Git)로 나가지 않습니다.
+이 앱은 더 이상 상시 켜진 서버가 필요 없습니다. 각 사용자의 PC에 설치된
+프로그램이 로컬에서 직접 실행되고, NAS 공유 폴더(과별 SQLite 파일)를 통해
+데이터를 주고받습니다.
 
-## 원칙
+## 아키텍처 요약
 
-1. Git 저장소 = 코드 + 스키마(`prisma/schema.prisma`, `prisma/migrations/`)만 보관
-2. 보안영역 서버 = `git pull`로 코드만 받아 실행, DB는 보안영역 내부 인스턴스 사용
-3. `.env`, 실제 데이터, 업로드 파일 등은 `.gitignore`에 의해 Git에 절대 포함되지 않음 (커밋 전 `git status`로 항상 확인)
+- **코드/화면/업무 로직**: Next.js 앱(`src/`) 그대로. 각 PC에서 로컬 서버로
+  실행되고, Electron 창이 그 화면을 보여줍니다.
+- **데이터 저장**: PostgreSQL이 아니라 **SQLite 파일들**입니다.
+  - `org.db` — 조직도/계정/업무영역/프로젝트 원본 (NAS 공유 폴더, 항상 하나)
+  - `<과이름>.db` — 각 과가 소유한 Work Order/로그 (과 단위로 분리)
+  - `__부서공통__.db` — 특정 과에 속하지 않는 부서 전체 업무
+- **동시 편집 보호**: 편집하려는 과는 잠금 파일(`locks/<과>.lock`)을 먼저
+  확보해야 합니다. 조회(대시보드/목록/상세보기)는 잠금과 무관하게 항상 가능.
+- **백업**: 체크인(저장)할 때마다 이전 버전이 `backups/<과>/<시각>.db`로
+  자동 보관되고, `logs/checkin-log.jsonl`에 누가/언제 저장했는지 기록됩니다.
 
-## 최초 배포
+## 최초 배포 절차
+
+### 1. NAS 공유 폴더 준비
+
+회사 NAS에 이 앱 전용 폴더를 하나 만듭니다(예: `\\사내서버\해양시스템공사부\WorkOrderApp`).
+이 폴더 자체가 곧 `org.db`/과별 파일/잠금/백업/로그가 저장되는 위치이며,
+Git에는 절대 올라가지 않습니다.
+
+### 2. 설치 파일 빌드 (개발 PC에서 1회)
 
 ```bash
-# 1. 보안영역 서버에서 저장소 clone (최초 1회) 또는 pull
-git clone <repo-url> work-order-app
-cd work-order-app
-git checkout main   # 배포 대상 브랜치
-
-# 2. 의존성 설치
 npm ci
-
-# 3. 환경변수 설정 (.env.example을 참고해 보안영역 내부 값으로 채움)
-cp .env.example .env
-# DATABASE_URL: 보안영역 내부 PostgreSQL 접속 정보
-# NEXTAUTH_SECRET: openssl rand -base64 32 로 생성한 값
-# NEXTAUTH_URL: 보안영역 내부에서 접근하는 실제 URL (예: http://internal-host:4200)
-# PORT=4200
-
-# 4. 프로덕션 빌드
-npm run build
-
-# 5. DB 스키마 적용 (데이터는 건드리지 않고 구조만 마이그레이션)
-npx prisma migrate deploy
-
-# 6. (최초 1회, 선택) 초기 관리자 계정 등 샘플 데이터가 필요하면 시드 실행
-npx prisma db seed
-
-# 7. 서비스 시작 (포트 4200)
-npm run start
+npx prisma generate   # binaryTargets에 windows가 포함되어 있어 Windows 쿼리 엔진도 함께 받음
+npm run dist:win      # dist/ 아래 Windows 설치 파일(.exe) 생성
 ```
 
-## 재배포 (업데이트)
+`dist:win`은 내부적으로 `npm run build`(Next.js 프로덕션 빌드) → `electron-builder --win`
+순서로 동작하며, `node_modules`/`.next`/`public`/`prisma`를 그대로 패키징합니다.
+
+> **주의**: 이 저장소를 다루는 개발 환경이 Linux 샌드박스일 경우, Electron
+> 바이너리 자체를 내려받지 못하는 네트워크 제약이 있을 수 있습니다(사내
+> 프록시/방화벽 정책에 따라 다를 수 있음). 실제 설치 파일 빌드와 실행 테스트는
+> **Windows PC에서** 진행해 주세요.
+
+### 3. 각 PC에 설치 및 최초 실행
+
+1. 생성된 설치 파일(`dist/*.exe`)을 각 PC에 배포하고 설치합니다.
+2. 처음 실행하면 "NAS 공유 폴더 경로를 입력하세요" 창이 뜹니다. 1번에서
+   만든 폴더의 **UNC 경로**(예: `\\사내서버\해양시스템공사부\WorkOrderApp`)를
+   입력합니다. 드라이브 문자(`V:\` 등)가 아니라 UNC 경로를 쓰면 PC마다
+   드라이브 문자가 달라도 항상 같은 폴더를 가리킵니다.
+3. 이후 자동으로 로그인 화면이 뜹니다. 이 설정은 `%APPDATA%/<앱이름>/config.json`에
+   저장되어 다음 실행부터는 다시 묻지 않습니다.
+
+### 4. 최초 계정/조직 데이터 준비
+
+`org.db`가 비어 있는 최초 1회는, 관리자 권한이 있는 누군가가 조직도/계정을
+만들어야 합니다. (초기 조직도 시딩 스크립트가 필요하면 `prisma/seed.ts`를
+새 구조에 맞게 참고해 별도 스크립트로 실행하거나, `/org` 화면에서 직접
+입력합니다.)
+
+## 업데이트(재배포)
+
+새 버전 설치 파일을 다시 빌드해서 각 PC에 재설치하면 됩니다. 데이터는
+NAS에 있으므로 프로그램 재설치와 무관하게 보존됩니다.
 
 ```bash
-git pull origin main
+git pull origin <배포 브랜치>
 npm ci
-npm run build
-npx prisma migrate deploy   # 스키마 변경이 있는 경우만 실제 적용됨
-pm2 restart work-order-app  # 아래 pm2 사용 시
-```
-
-## 상시 실행 (pm2 예시)
-
-```bash
-npm install -g pm2
-
-pm2 start npm --name work-order-app -- run start
-pm2 save
-pm2 startup   # 서버 재부팅 시 자동 시작 설정 안내 출력
-```
-
-`ecosystem.config.js` 를 별도로 만들고 싶다면:
-
-```js
-module.exports = {
-  apps: [
-    {
-      name: "work-order-app",
-      script: "npm",
-      args: "run start",
-      env: {
-        NODE_ENV: "production",
-        PORT: 4200,
-      },
-    },
-  ],
-};
+npm run dist:win
 ```
 
 ## 데이터 격리 체크리스트
 
-- [ ] 보안영역 서버의 `.env`는 Git에 커밋되지 않았는가 (`git status`로 확인)
-- [ ] `DATABASE_URL`이 보안영역 내부 PostgreSQL을 가리키는가 (외부/개발 DB 아님)
-- [ ] `npx prisma migrate deploy`만 사용하고, 데이터가 포함된 덤프 파일을 Git에 올리지 않았는가
-- [ ] 업로드/첨부파일 저장 경로(추가 구현 시)가 `.gitignore`에 포함되어 있는가
+- [ ] Git 저장소에는 스키마(`prisma/schema.prisma`, `prisma/migrations/`)만 있고,
+      실제 업무 데이터(`org.db`, 과별 `.db` 파일)는 전혀 포함되지 않았는가
+- [ ] `.dev-nas/`, `.dev-local/`(로컬 테스트용 폴더)가 `.gitignore`에 포함되어
+      실수로 커밋되지 않았는가
+- [ ] `dist/`(설치 파일 빌드 산출물)가 Git에 올라가지 않았는가
+- [ ] NAS 공유 폴더 접근 권한이 해당 부서원에게만 부여되어 있는가
+
+## 참고: 기존 방식과 달라진 점
+
+이전(초기 스캐폴딩) 버전은 PostgreSQL을 쓰는 상시 웹서버 방식이었습니다.
+사내 보안 정책상 상시 서버를 구하기 어려워, 각 PC에서 실행되는 Electron
+데스크톱 앱 + NAS 공유 폴더의 SQLite 파일 구조로 전환했습니다. 자세한
+설계 배경은 커밋 히스토리를 참고하세요.

@@ -16,6 +16,7 @@ import { TransferredBadge } from "@/components/transferred-badge";
 import { CategoryProgressChart } from "@/components/category-progress-chart";
 import { StatusPieChart } from "@/components/status-pie-chart";
 import { MyTodoForm } from "@/components/my-todo-form";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 const RECENT_LOG_LIMIT = 5;
 
@@ -136,11 +137,16 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
-      <h1 className="text-xl font-semibold text-slate-900">전체 현황 대시보드</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        내 업무리스트와 과별 진행현황을 먼저 확인하고, 아래에서 전체 현황을
-        살펴보세요.
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">전체 현황 대시보드</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            내 업무리스트와 과별 진행현황을 먼저 확인하고, 아래에서 전체 현황을
+            살펴보세요.
+          </p>
+        </div>
+        <AutoRefresh intervalSeconds={60} />
+      </div>
 
       {session?.user && (
         <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
