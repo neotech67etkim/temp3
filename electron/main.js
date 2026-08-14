@@ -17,6 +17,7 @@ const { app, BrowserWindow, dialog } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const http = require("node:http");
+const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { resolveNasRoot, stripDriveLetter } = require("./resolve-nas-path");
 
@@ -45,6 +46,21 @@ function loadConfig() {
 function saveConfig(config) {
   fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+}
+
+/**
+ * NextAuth(next-auth v5)는 JWT 서명/암호화에 쓸 AUTH_SECRET이 반드시 있어야
+ * 한다. .env는 Git에 올리지 않으므로(레포에 실제 비밀값을 두지 않기 위해)
+ * 배포된 앱에는 애초에 없다 - 그래서 이 앱 전용으로 최초 실행 시 한 번만
+ * 무작위 값을 생성해서 config.json에 저장해두고, 이후에는 매번 그 값을
+ * 재사용한다(재실행마다 값이 바뀌면 기존 로그인 세션/쿠키가 전부 무효화됨).
+ */
+function ensureAuthSecret() {
+  const config = loadConfig() || {};
+  if (config.authSecret) return config.authSecret;
+  const authSecret = crypto.randomBytes(32).toString("base64");
+  saveConfig({ ...config, authSecret });
+  return authSecret;
 }
 
 function showHtmlPrompt({ title, width, height, html }) {
@@ -131,11 +147,11 @@ async function resolveOrPromptNasRoot() {
       const relativePath = stripDriveLetter(input);
       if (!relativePath) {
         // "V:\..." 형태가 아니면(UNC 등) 그대로 상대경로 없이 고정 경로로 취급.
-        config = { fixedPath: input };
+        config = { ...config, fixedPath: input };
         saveConfig(config);
         return input;
       }
-      config = { relativePath, lastKnownDrive: input.trim()[0].toUpperCase() };
+      config = { ...config, relativePath, lastKnownDrive: input.trim()[0].toUpperCase() };
       saveConfig(config);
     }
 
@@ -158,8 +174,8 @@ async function resolveOrPromptNasRoot() {
     );
     const relativePath = stripDriveLetter(input);
     config = relativePath
-      ? { relativePath, lastKnownDrive: input.trim()[0].toUpperCase() }
-      : { fixedPath: input };
+      ? { ...config, relativePath, lastKnownDrive: input.trim()[0].toUpperCase() }
+      : { ...config, fixedPath: input };
     saveConfig(config);
   }
 }
@@ -232,12 +248,16 @@ app.whenReady().then(async () => {
 
   fs.mkdirSync(WORKSPACE_ROOT, { recursive: true });
 
+  const authSecret = ensureAuthSecret();
+
   const env = {
     NODE_ENV: "production",
     NAS_ROOT: nasRoot,
     LOCAL_WORKSPACE_ROOT: WORKSPACE_ROOT,
     DATABASE_URL: `file:${path.join(nasRoot, "org.db")}`,
     PRISMA_MIGRATIONS_DIR: path.join(APP_ROOT, "prisma", "migrations"),
+    AUTH_SECRET: authSecret,
+    AUTH_TRUST_HOST: "true",
   };
 
   try {
