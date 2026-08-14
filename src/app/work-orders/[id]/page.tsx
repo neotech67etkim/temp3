@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auth } from "@/auth";
-import { orgDb } from "@/lib/db";
+import { orgDb, getActiveContextInfo } from "@/lib/db";
 import { getNasStore, getMigrationsDir } from "@/lib/app-config";
 import {
   allStoreKeys,
@@ -28,6 +28,7 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { WorkOrderLogForm } from "@/components/work-order-log-form";
 import { WorkOrderLogList } from "@/components/work-order-log-list";
 import { TransferEditor } from "@/components/transfer-editor";
+import { EditModeNotice } from "@/components/edit-mode-notice";
 
 export default async function WorkOrderDetailPage({
   params,
@@ -64,6 +65,7 @@ export default async function WorkOrderDetailPage({
   const rollupProgress = progressMap.get(workOrder.id) ?? workOrder.progress;
 
   const canManage = canManageWorkOrders(session.user.role);
+  const isEditing = getActiveContextInfo()?.mode === "edit";
   const isAssignedToMe = workOrder.assignedUserId === session.user.id;
   const hasChildren = children.length > 0;
 
@@ -132,7 +134,7 @@ export default async function WorkOrderDetailPage({
         </div>
       </div>
 
-      {canManage && (
+      {canManage && isEditing && (
         <div className="mt-3 flex items-center gap-3">
           <WorkOrderEditForm
             id={workOrder.id}
@@ -155,6 +157,11 @@ export default async function WorkOrderDetailPage({
               삭제
             </ConfirmSubmitButton>
           </form>
+        </div>
+      )}
+      {canManage && !isEditing && (
+        <div className="mt-3">
+          <EditModeNotice message="이 업무를 수정하거나 삭제하려면" />
         </div>
       )}
 
@@ -191,50 +198,55 @@ export default async function WorkOrderDetailPage({
 
       {(canManage || isAssignedToMe) && (
         <div className="mt-4 flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-5">
-          <div>
-            <p className="mb-1 text-xs font-medium text-slate-500">
-              상태 변경
-            </p>
-            <StatusEditor id={workOrder.id} status={workOrder.status} />
-          </div>
-          <div>
-            <p className="mb-1 text-xs font-medium text-slate-500">
-              우선순위 변경
-            </p>
-            <PriorityEditor id={workOrder.id} priority={workOrder.priority} />
-          </div>
-          {!hasChildren && (
-            <div>
-              <p className="mb-1 text-xs font-medium text-slate-500">
-                진행률 업데이트
-              </p>
-              <ProgressEditor id={workOrder.id} progress={workOrder.progress} />
-            </div>
-          )}
-          {hasChildren && (
-            <p className="text-xs text-slate-400">
-              하위 업무가 있어 진행률은 하위 업무 평균으로 자동 계산됩니다.
-            </p>
-          )}
-          {canDirectAssign && transferCandidates.length > 0 && (
-            <div>
-              <p className="mb-1 text-xs font-medium text-slate-500">
-                {workOrder.assigneeType === "USER"
-                  ? "담당자 변경(이관)"
-                  : "담당자 개인 지정"}
-              </p>
-              {workOrder.assigneeType !== "USER" && (
-                <p className="mb-1 text-xs text-slate-400">
-                  하위 업무를 새로 만들지 않고, 이 업무 자체를 소속 인원 개인
-                  담당으로 바로 넘길 수 있습니다.
+          {!isEditing && <EditModeNotice message="상태/진행률을 변경하려면" />}
+          {isEditing && (
+            <>
+              <div>
+                <p className="mb-1 text-xs font-medium text-slate-500">
+                  상태 변경
+                </p>
+                <StatusEditor id={workOrder.id} status={workOrder.status} />
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium text-slate-500">
+                  우선순위 변경
+                </p>
+                <PriorityEditor id={workOrder.id} priority={workOrder.priority} />
+              </div>
+              {!hasChildren && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-slate-500">
+                    진행률 업데이트
+                  </p>
+                  <ProgressEditor id={workOrder.id} progress={workOrder.progress} />
+                </div>
+              )}
+              {hasChildren && (
+                <p className="text-xs text-slate-400">
+                  하위 업무가 있어 진행률은 하위 업무 평균으로 자동 계산됩니다.
                 </p>
               )}
-              <TransferEditor
-                id={workOrder.id}
-                currentUserId={workOrder.assignedUserId}
-                candidates={transferCandidates}
-              />
-            </div>
+              {canDirectAssign && transferCandidates.length > 0 && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-slate-500">
+                    {workOrder.assigneeType === "USER"
+                      ? "담당자 변경(이관)"
+                      : "담당자 개인 지정"}
+                  </p>
+                  {workOrder.assigneeType !== "USER" && (
+                    <p className="mb-1 text-xs text-slate-400">
+                      하위 업무를 새로 만들지 않고, 이 업무 자체를 소속 인원 개인
+                      담당으로 바로 넘길 수 있습니다.
+                    </p>
+                  )}
+                  <TransferEditor
+                    id={workOrder.id}
+                    currentUserId={workOrder.assignedUserId}
+                    candidates={transferCandidates}
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -291,7 +303,11 @@ export default async function WorkOrderDetailPage({
         </h2>
         {(canManage || isAssignedToMe) && (
           <div className="mb-6 border-b border-slate-100 pb-6">
-            <WorkOrderLogForm workOrderId={workOrder.id} />
+            {isEditing ? (
+              <WorkOrderLogForm workOrderId={workOrder.id} />
+            ) : (
+              <EditModeNotice message="진행 관련 정보를 남기려면" />
+            )}
           </div>
         )}
         <WorkOrderLogList logs={workOrder.logs} />

@@ -545,7 +545,10 @@ export async function createProject(formData: FormData) {
 
   if (!name) throw new Error("프로젝트명을 입력하세요.");
 
-  await prisma.project.create({
+  // Project는 division 파일이 아니라 조직 원본(org.db)에 저장한다. 여기서
+  // prisma(현재 체크아웃된 과 파일)에 쓰면 그 과 파일에만 갇혀서 다른 모든
+  // 조회(orgDb.project.findMany 등)에서 안 보이게 된다.
+  await orgDb.project.create({
     data: { name, description, categoryId },
   });
 
@@ -561,7 +564,7 @@ export async function createCategory(formData: FormData) {
 
   if (!name) throw new Error("업무영역명을 입력하세요.");
 
-  await prisma.category.create({ data: { name, color } });
+  await orgDb.category.create({ data: { name, color } });
 
   revalidatePath("/projects");
   revalidatePath("/dashboard");

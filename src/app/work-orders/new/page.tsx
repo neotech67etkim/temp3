@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { orgDb } from "@/lib/db";
+import { orgDb, getActiveContextInfo } from "@/lib/db";
 import { getNasStore, getMigrationsDir } from "@/lib/app-config";
 import { allStoreKeys, findWorkOrderById } from "@/lib/work-order-tree";
 import {
@@ -9,6 +9,7 @@ import {
 } from "@/lib/org-access";
 import { WorkOrderForm } from "@/components/work-order-form";
 import { BackToDashboard } from "@/components/back-to-dashboard";
+import { EditModeNotice } from "@/components/edit-mode-notice";
 
 export default async function NewWorkOrderPage({
   searchParams,
@@ -29,6 +30,7 @@ export default async function NewWorkOrderPage({
 
   const isAdmin = session.user.role === "ADMIN";
   const allowedTypes = assignableTypesFor(session.user.role);
+  const isEditing = getActiveContextInfo()?.mode === "edit";
 
   const [projects, departments, divisions, teams, users] = await Promise.all([
     orgDb.project.findMany({ orderBy: { name: "asc" } }),
@@ -74,16 +76,20 @@ export default async function NewWorkOrderPage({
       )}
 
       <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
-        <WorkOrderForm
-          projects={projects}
-          departments={departments}
-          divisions={divisions}
-          teams={teams}
-          users={users}
-          allowedTypes={allowedTypes}
-          defaultProjectId={projectId}
-          parentId={parentId}
-        />
+        {isEditing ? (
+          <WorkOrderForm
+            projects={projects}
+            departments={departments}
+            divisions={divisions}
+            teams={teams}
+            users={users}
+            allowedTypes={allowedTypes}
+            defaultProjectId={projectId}
+            parentId={parentId}
+          />
+        ) : (
+          <EditModeNotice message="업무를 할당하려면" />
+        )}
       </div>
     </div>
   );

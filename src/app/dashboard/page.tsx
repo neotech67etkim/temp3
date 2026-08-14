@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/auth";
-import { orgDb } from "@/lib/db";
+import { orgDb, getActiveContextInfo } from "@/lib/db";
 import { getNasStore, getMigrationsDir } from "@/lib/app-config";
 import { allStoreKeys } from "@/lib/work-order-tree";
 import { queryAllDivisions } from "@/lib/multi-division-query";
@@ -17,6 +17,7 @@ import { CategoryProgressChart } from "@/components/category-progress-chart";
 import { StatusPieChart } from "@/components/status-pie-chart";
 import { MyTodoForm } from "@/components/my-todo-form";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { EditModeNotice } from "@/components/edit-mode-notice";
 
 const RECENT_LOG_LIMIT = 5;
 
@@ -34,6 +35,7 @@ export default async function DashboardPage() {
   const canDelegate = session?.user
     ? canManageWorkOrders(session.user.role)
     : false;
+  const isEditing = getActiveContextInfo()?.mode === "edit";
 
   const store = getNasStore();
   const migrationsDir = getMigrationsDir();
@@ -154,7 +156,11 @@ export default async function DashboardPage() {
             내 업무리스트
           </h2>
 
-          <MyTodoForm projects={projects} />
+          {isEditing ? (
+            <MyTodoForm projects={projects} />
+          ) : (
+            <EditModeNotice message="새 할 일을 추가하려면" />
+          )}
 
           {workList.length === 0 ? (
             <p className="mt-4 text-sm text-slate-400">표시할 업무가 없습니다.</p>

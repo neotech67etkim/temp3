@@ -1,26 +1,52 @@
 import Link from "next/link";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/db";
+import { orgDb, getActiveContextInfo } from "@/lib/db";
+import { getNasStore, getMigrationsDir } from "@/lib/app-config";
+import { allStoreKeys } from "@/lib/work-order-tree";
+import { queryAllDivisions } from "@/lib/multi-division-query";
 import { computeProgress } from "@/lib/progress";
 import { canManageWorkOrders } from "@/lib/org-access";
 import { createProject, createCategory } from "@/actions/work-orders";
 import { ProgressBar } from "@/components/progress-bar";
 import { BackToDashboard } from "@/components/back-to-dashboard";
+import { EditModeNotice } from "@/components/edit-mode-notice";
 
 export default async function ProjectsPage() {
   const session = await auth();
   const canManage = session?.user ? canManageWorkOrders(session.user.role) : false;
+  const isEditing = getActiveContextInfo()?.mode === "edit";
 
-  const [projects, categories] = await Promise.all([
-    prisma.project.findMany({
-      include: {
-        category: true,
-        workOrders: { select: { id: true, parentId: true, progress: true } },
-      },
+  // Project/Category는 division 파일이 아니라 조직 원본(org.db)에 있으므로
+  // orgDb로 읽고, 각 프로젝트의 진행률 계산에 필요한 WorkOrder만 전체 과
+  // 파일에서 모아온다(현재 체크아웃된 과가 없어도 항상 조회 가능해야 함 -
+  // "모니터링 모드"에서도 프로젝트 목록은 볼 수 있어야 하기 때문).
+  const store = getNasStore();
+  const migrationsDir = getMigrationsDir();
+  const divisions = await orgDb.division.findMany({ select: { name: true } });
+  const divisionKeys = allStoreKeys(divisions.map((d) => d.name));
+
+  const [projectRows, categories, workOrderResults] = await Promise.all([
+    orgDb.project.findMany({
+      include: { category: true },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.category.findMany({ orderBy: { name: "asc" } }),
+    orgDb.category.findMany({ orderBy: { name: "asc" } }),
+    queryAllDivisions(store, divisionKeys, migrationsDir, (client) =>
+      client.workOrder.findMany({
+        select: { id: true, parentId: true, projectId: true, progress: true },
+      }),
+    ),
   ]);
+  const allWorkOrders = workOrderResults.flatMap((r) => r.value);
+  const workOrdersByProject = new Map<string, typeof allWorkOrders>();
+  for (const wo of allWorkOrders) {
+    if (!workOrdersByProject.has(wo.projectId)) workOrdersByProject.set(wo.projectId, []);
+    workOrdersByProject.get(wo.projectId)!.push(wo);
+  }
+  const projects = projectRows.map((p) => ({
+    ...p,
+    workOrders: workOrdersByProject.get(p.id) ?? [],
+  }));
 
   const UNCATEGORIZED_GROUP = "업무영역 없음";
   const groups = new Map<string, typeof projects>();
@@ -95,7 +121,13 @@ export default async function ProjectsPage() {
         )}
       </div>
 
-      {canManage && (
+      {canManage && !isEditing && (
+        <div className="mt-6">
+          <EditModeNotice message="업무영역/프로젝트를 추가하려면" />
+        </div>
+      )}
+
+      {canManage && isEditing && (
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <form
             action={createCategory}
