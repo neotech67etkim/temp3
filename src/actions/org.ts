@@ -3,9 +3,12 @@
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import type { Role } from "@prisma/client";
-import { prisma } from "@/lib/db";
+import { orgDb } from "@/lib/db";
 import { auth } from "@/auth";
 import { canManageOrg } from "@/lib/org-access";
+import { NasStore } from "@/lib/nas-store";
+import { queryAllDivisions } from "@/lib/multi-division-query";
+import { getNasStoreConfig, getMigrationsDir } from "@/lib/app-config";
 
 async function requireAdmin() {
   const session = await auth();
@@ -19,7 +22,7 @@ export async function createDepartment(formData: FormData) {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("부서명을 입력하세요.");
-  await prisma.department.create({ data: { name } });
+  await orgDb.department.create({ data: { name } });
   revalidatePath("/org");
 }
 
@@ -28,7 +31,7 @@ export async function createDivision(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const departmentId = String(formData.get("departmentId") ?? "");
   if (!name || !departmentId) throw new Error("과 이름과 소속 부서를 입력하세요.");
-  await prisma.division.create({ data: { name, departmentId } });
+  await orgDb.division.create({ data: { name, departmentId } });
   revalidatePath("/org");
 }
 
@@ -37,7 +40,7 @@ export async function createTeam(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const divisionId = String(formData.get("divisionId") ?? "");
   if (!name || !divisionId) throw new Error("팀 이름과 소속 과를 입력하세요.");
-  await prisma.team.create({ data: { name, divisionId } });
+  await orgDb.team.create({ data: { name, divisionId } });
   revalidatePath("/org");
 }
 
@@ -58,7 +61,7 @@ export async function createUser(formData: FormData) {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  await prisma.user.create({
+  await orgDb.user.create({
     data: {
       email,
       name,
@@ -76,7 +79,7 @@ export async function deleteDepartment(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) throw new Error("잘못된 요청입니다.");
-  await prisma.department.delete({ where: { id } });
+  await orgDb.department.delete({ where: { id } });
   revalidatePath("/org");
 }
 
@@ -84,7 +87,7 @@ export async function deleteDivision(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) throw new Error("잘못된 요청입니다.");
-  await prisma.division.delete({ where: { id } });
+  await orgDb.division.delete({ where: { id } });
   revalidatePath("/org");
 }
 
@@ -92,7 +95,7 @@ export async function deleteTeam(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) throw new Error("잘못된 요청입니다.");
-  await prisma.team.delete({ where: { id } });
+  await orgDb.team.delete({ where: { id } });
   revalidatePath("/org");
 }
 
@@ -102,15 +105,24 @@ export async function deleteUser(formData: FormData) {
   if (!id) throw new Error("잘못된 요청입니다.");
   if (id === admin.id) throw new Error("본인 계정은 삭제할 수 없습니다.");
 
-  const createdCount = await prisma.workOrder.count({
-    where: { createdById: id },
-  });
-  if (createdCount > 0) {
+  // WorkOrder는 org.db가 아니라 각 과 파일에 있으므로, 전체 과 파일을 훑어서
+  // 이 사용자가 어딘가에 업무를 만든 적이 있는지 확인해야 한다.
+  const divisions = await orgDb.division.findMany({ select: { name: true } });
+  const store = new NasStore(getNasStoreConfig());
+  const counts = await queryAllDivisions(
+    store,
+    divisions.map((d) => d.name),
+    getMigrationsDir(),
+    (client) => client.workOrder.count({ where: { createdById: id } }),
+  );
+  const totalCreated = counts.reduce((sum, r) => sum + r.value, 0);
+
+  if (totalCreated > 0) {
     throw new Error(
       "이 사용자가 생성한 Work Order가 있어 삭제할 수 없습니다. 먼저 관련 업무를 다른 담당자에게 이관하세요.",
     );
   }
 
-  await prisma.user.delete({ where: { id } });
+  await orgDb.user.delete({ where: { id } });
   revalidatePath("/org");
 }

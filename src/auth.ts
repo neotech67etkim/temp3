@@ -3,7 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import type { Role } from "@prisma/client";
 import { authConfig } from "@/auth.config";
-import { prisma } from "@/lib/db";
+import { orgDb } from "@/lib/db";
 
 type AppTokenFields = {
   id: string;
@@ -28,7 +28,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null;
         }
 
-        const user = await prisma.user.findUnique({ where: { email } });
+        const user = await orgDb.user.findUnique({ where: { email } });
         if (!user) return null;
 
         const passwordValid = await bcrypt.compare(password, user.passwordHash);

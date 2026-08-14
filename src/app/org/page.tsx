@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { prisma } from "@/lib/db";
+import { orgDb } from "@/lib/db";
 import { ROLE_LABEL, canManageOrg } from "@/lib/org-access";
 import {
   createDepartment,
@@ -49,7 +49,7 @@ export default async function OrgPage() {
 
   const currentUserId = session.user.id;
 
-  const departments = await prisma.department.findMany({
+  const departments = await orgDb.department.findMany({
     include: {
       divisions: {
         include: {

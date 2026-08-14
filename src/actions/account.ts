@@ -2,7 +2,7 @@
 
 import bcrypt from "bcryptjs";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/db";
+import { orgDb } from "@/lib/db";
 
 export async function updateOwnAccount(
   _prevState: string | undefined,
@@ -20,7 +20,7 @@ export async function updateOwnAccount(
     return "현재 비밀번호를 입력하세요.";
   }
 
-  const user = await prisma.user.findUnique({
+  const user = await orgDb.user.findUnique({
     where: { id: session.user.id },
   });
   if (!user) return "사용자를 찾을 수 없습니다.";
@@ -31,7 +31,7 @@ export async function updateOwnAccount(
   const data: { email?: string; passwordHash?: string } = {};
 
   if (newEmail && newEmail !== user.email) {
-    const exists = await prisma.user.findUnique({ where: { email: newEmail } });
+    const exists = await orgDb.user.findUnique({ where: { email: newEmail } });
     if (exists) return "이미 사용 중인 이메일입니다.";
     data.email = newEmail;
   }
@@ -44,7 +44,7 @@ export async function updateOwnAccount(
 
   if (Object.keys(data).length === 0) return "변경할 내용이 없습니다.";
 
-  await prisma.user.update({ where: { id: user.id }, data });
+  await orgDb.user.update({ where: { id: user.id }, data });
 
   return data.email
     ? "저장되었습니다. 이메일을 변경하셨으니 다음 로그인부터 새 이메일을 사용하세요."
