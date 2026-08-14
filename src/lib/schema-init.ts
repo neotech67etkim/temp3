@@ -38,6 +38,9 @@ export async function ensureSchema(
   dbPath: string,
   migrationsDir: string,
 ): Promise<void> {
+  // SQLite는 파일이 없으면 만들어주지만, 부모 폴더까지 만들어주진 않는다.
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
   const client = new PrismaClient({ datasourceUrl: `file:${dbPath}` });
   try {
     const tables = await client.$queryRawUnsafe<{ name: string }[]>(

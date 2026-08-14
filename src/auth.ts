@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import type { Role } from "@prisma/client";
 import { authConfig } from "@/auth.config";
 import { orgDb } from "@/lib/db";
+import { ensureOrgDbReady } from "@/lib/bootstrap";
 
 type AppTokenFields = {
   id: string;
@@ -28,6 +29,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null;
         }
 
+        await ensureOrgDbReady();
         const user = await orgDb.user.findUnique({ where: { email } });
         if (!user) return null;
 

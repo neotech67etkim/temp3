@@ -20,7 +20,7 @@ const globalForDb = globalThis as unknown as {
   __activeMode: ActiveMode | undefined;
 };
 
-function resolveOrgDbPath(): string {
+export function resolveOrgDbPath(): string {
   // ORG_DB_PATH를 명시적으로 지정했으면 그걸 우선 사용.
   const explicit = process.env.ORG_DB_PATH;
   if (explicit) return explicit;
