@@ -54,7 +54,13 @@ function showHtmlPrompt({ title, width, height, html }) {
       height,
       resizable: false,
       title,
-      webPreferences: { contextIsolation: true },
+      autoHideMenuBar: true,
+      webPreferences: {
+        contextIsolation: true,
+        // contextIsolation이 켜져 있으면 페이지 JS는 require()를 쓸 수 없다.
+        // preload가 안전하게 window.promptAPI.submit()만 노출해준다.
+        preload: path.join(__dirname, "preload-prompt.js"),
+      },
     });
 
     const { ipcMain } = require("electron");
@@ -94,13 +100,17 @@ async function promptForNasPath(previousError) {
   찾아서 연결합니다 - PC마다, 또는 재연결될 때마다 드라이브 문자가 달라져도
   괜찮습니다.</p>
   <input id="nasPath" placeholder="V:\\10. 외업도장과\\AI 프로젝트\\dev" />
-  <button onclick="submit()">저장하고 시작</button>
+  <button id="submitBtn">저장하고 시작</button>
   <script>
     function submit() {
       const value = document.getElementById('nasPath').value.trim();
       if (!value) return;
-      require('electron').ipcRenderer.send('prompt-submitted', value);
+      window.promptAPI.submit(value);
     }
+    document.getElementById('submitBtn').addEventListener('click', submit);
+    document.getElementById('nasPath').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') submit();
+    });
   </script>
 </body></html>`;
 
