@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/db";
+import { orgDb } from "@/lib/db";
+import { getNasStore, getMigrationsDir } from "@/lib/app-config";
+import { allStoreKeys, getProjectWorkOrdersDetailed } from "@/lib/work-order-tree";
 import { buildTree, computeProgress } from "@/lib/progress";
 import { canManageWorkOrders } from "@/lib/org-access";
 import { WorkOrderTree } from "@/components/work-order-tree";
@@ -16,27 +18,25 @@ export default async function ProjectDetailPage({
   const session = await auth();
   const canManage = session?.user ? canManageWorkOrders(session.user.role) : false;
 
-  const project = await prisma.project.findUnique({
+  const project = await orgDb.project.findUnique({
     where: { id },
-    include: {
-      category: true,
-      workOrders: {
-        include: {
-          assignedDept: { select: { name: true } },
-          assignedDiv: { select: { name: true } },
-          assignedTeam: { select: { name: true } },
-          assignedUser: { select: { name: true } },
-          createdBy: { select: { name: true } },
-        },
-        orderBy: { createdAt: "asc" },
-      },
-    },
+    include: { category: true },
   });
 
   if (!project) notFound();
 
-  const progressMap = computeProgress(project.workOrders);
-  const tree = buildTree(project.workOrders);
+  const store = getNasStore();
+  const migrationsDir = getMigrationsDir();
+  const divisions = await orgDb.division.findMany({ select: { name: true } });
+  const divisionKeys = allStoreKeys(divisions.map((d) => d.name));
+
+  const located = await getProjectWorkOrdersDetailed(store, divisionKeys, migrationsDir, id);
+  const workOrders = located
+    .map((r) => r.workOrder)
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+  const progressMap = computeProgress(workOrders);
+  const tree = buildTree(workOrders);
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">

@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { prisma } from "@/lib/db";
+import { orgDb } from "@/lib/db";
 import {
   GANTT_DEPT_WIDE_GROUP,
   GANTT_UNASSIGNED_GROUP,
@@ -38,7 +38,7 @@ export default async function GanttPage({
 
   if (!canBrowseAll) {
     const division = session.user.divisionId
-      ? await prisma.division.findUnique({
+      ? await orgDb.division.findUnique({
           where: { id: session.user.divisionId },
           select: { id: true, name: true },
         })
@@ -69,7 +69,7 @@ export default async function GanttPage({
 
   const { departmentId, divisionId } = await searchParams;
 
-  const departments = await prisma.department.findMany({
+  const departments = await orgDb.department.findMany({
     include: { divisions: { orderBy: { name: "asc" } } },
     orderBy: { name: "asc" },
   });

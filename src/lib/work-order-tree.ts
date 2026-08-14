@@ -8,7 +8,7 @@
  */
 
 import { PrismaClient, type WorkOrder } from "@prisma/client";
-import { NasStore } from "./nas-store";
+import { NasStore, type LockInfo } from "./nas-store";
 import { queryAllDivisions } from "./multi-division-query";
 import { ensureSchema } from "./schema-init";
 
@@ -67,6 +67,39 @@ export async function getProjectWorkOrders(
 ): Promise<LocatedWorkOrder[]> {
   const results = await collectAcrossDivisions(store, divisionKeys, migrationsDir, (client) =>
     client.workOrder.findMany({ where: { projectId } }),
+  );
+  return results.map((r) => ({ key: r.key, workOrder: r.value }));
+}
+
+export type LocatedWorkOrderDetailed = {
+  key: string;
+  workOrder: WorkOrder & {
+    assignedDept: { name: string } | null;
+    assignedDiv: { name: string } | null;
+    assignedTeam: { name: string } | null;
+    assignedUser: { name: string } | null;
+    createdBy: { name: string };
+  };
+};
+
+/** getProjectWorkOrders와 같지만, 담당자/지시자 이름까지 함께 가져온다(트리 화면용). */
+export async function getProjectWorkOrdersDetailed(
+  store: NasStore,
+  divisionKeys: string[],
+  migrationsDir: string,
+  projectId: string,
+): Promise<LocatedWorkOrderDetailed[]> {
+  const results = await collectAcrossDivisions(store, divisionKeys, migrationsDir, (client) =>
+    client.workOrder.findMany({
+      where: { projectId },
+      include: {
+        assignedDept: { select: { name: true } },
+        assignedDiv: { select: { name: true } },
+        assignedTeam: { select: { name: true } },
+        assignedUser: { select: { name: true } },
+        createdBy: { select: { name: true } },
+      },
+    }),
   );
   return results.map((r) => ({ key: r.key, workOrder: r.value }));
 }
@@ -185,4 +218,70 @@ export async function getWorkOrderDetail(
   } finally {
     await client.$disconnect();
   }
+}
+
+export type CascadeDeleteResult =
+  | { ok: true; deletedCount: number }
+  | { ok: false; blockedKey: string; lock: LockInfo };
+
+/**
+ * 업무와 그 하위(자식+손자...) 전체를 삭제한다. parentId가 더 이상 로컬 FK가
+ * 아니므로(SQLite의 자동 cascade 불가), 관련된 모든 과 파일을 직접 찾아서
+ * 지운다. 관련된 모든 파일의 편집 잠금을 먼저 확보한 뒤에만 실제 삭제를
+ * 수행한다 - 하나라도 다른 사람이 편집 중이면 아무것도 지우지 않고 중단한다
+ * (일부만 지워진 상태가 되는 걸 막기 위함).
+ */
+export async function deleteWorkOrderCascade(
+  store: NasStore,
+  divisionKeys: string[],
+  migrationsDir: string,
+  id: string,
+  holder: { name: string; email: string },
+): Promise<CascadeDeleteResult> {
+  const target = await findWorkOrderById(store, divisionKeys, migrationsDir, id);
+  if (!target) {
+    return { ok: true, deletedCount: 0 };
+  }
+  const descendants = await getDescendants(store, divisionKeys, migrationsDir, id);
+  const allItems = [target, ...descendants];
+
+  const idsByKey = new Map<string, string[]>();
+  for (const item of allItems) {
+    if (!idsByKey.has(item.key)) idsByKey.set(item.key, []);
+    idsByKey.get(item.key)!.push(item.workOrder.id);
+  }
+  const keys = [...idsByKey.keys()];
+
+  const acquiredKeys: string[] = [];
+  for (const key of keys) {
+    const { result } = store.checkoutForEdit(key, holder);
+    if (!result.ok) {
+      for (const acquiredKey of acquiredKeys) {
+        store.discardEdit(acquiredKey);
+      }
+      return { ok: false, blockedKey: key, lock: result.lock };
+    }
+    acquiredKeys.push(key);
+  }
+
+  let deletedCount = 0;
+  for (const key of keys) {
+    const localPath = store.localDbPath(key);
+    await ensureSchema(localPath, migrationsDir);
+    const client = new PrismaClient({ datasourceUrl: `file:${localPath}` });
+    try {
+      const result = await client.workOrder.deleteMany({
+        where: { id: { in: idsByKey.get(key)! } },
+      });
+      deletedCount += result.count;
+    } finally {
+      await client.$disconnect();
+    }
+  }
+
+  for (const key of keys) {
+    store.checkinAfterEdit(key);
+  }
+
+  return { ok: true, deletedCount };
 }

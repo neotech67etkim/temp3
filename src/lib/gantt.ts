@@ -1,5 +1,8 @@
 import type { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/db";
+import { orgDb } from "@/lib/db";
+import { getNasStore, getMigrationsDir } from "@/lib/app-config";
+import { DEPT_COMMON_KEY } from "@/lib/work-order-tree";
+import { queryAllDivisions } from "@/lib/multi-division-query";
 import { formatAssignee } from "@/lib/format";
 import { isOverdue } from "@/lib/delay";
 
@@ -24,8 +27,14 @@ export async function getGanttItems(scope: {
   divisionId?: string;
 }): Promise<GanttItem[]> {
   let where: Prisma.WorkOrderWhereInput = {};
+  let storeKeys: string[];
 
   if (scope.divisionId) {
+    const division = await orgDb.division.findUnique({
+      where: { id: scope.divisionId },
+      select: { name: true },
+    });
+    if (!division) return [];
     where = {
       OR: [
         { assignedDivId: scope.divisionId },
@@ -33,7 +42,13 @@ export async function getGanttItems(scope: {
         { assignedUser: { divisionId: scope.divisionId } },
       ],
     };
+    // 특정 과로 배정된 업무는 그 과 파일에만 저장되므로 해당 파일 하나만 보면 된다.
+    storeKeys = [division.name];
   } else if (scope.departmentId) {
+    const divisions = await orgDb.division.findMany({
+      where: { departmentId: scope.departmentId },
+      select: { name: true },
+    });
     where = {
       OR: [
         { assignedDeptId: scope.departmentId },
@@ -42,18 +57,35 @@ export async function getGanttItems(scope: {
         { assignedUser: { departmentId: scope.departmentId } },
       ],
     };
+    // 부서 전체 보기: 부서 공통 파일 + 소속된 모든 과 파일을 함께 훑는다.
+    storeKeys = [DEPT_COMMON_KEY, ...divisions.map((d) => d.name)];
+  } else {
+    return [];
   }
 
-  const workOrders = await prisma.workOrder.findMany({
-    where,
-    include: {
-      assignedDept: { select: { name: true } },
-      assignedDiv: { select: { name: true } },
-      assignedTeam: { select: { name: true, division: { select: { name: true } } } },
-      assignedUser: { select: { name: true, division: { select: { name: true } } } },
-    },
-    orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
-  });
+  const store = getNasStore();
+  const migrationsDir = getMigrationsDir();
+
+  const results = await queryAllDivisions(store, storeKeys, migrationsDir, (client) =>
+    client.workOrder.findMany({
+      where,
+      include: {
+        assignedDept: { select: { name: true } },
+        assignedDiv: { select: { name: true } },
+        assignedTeam: { select: { name: true, division: { select: { name: true } } } },
+        assignedUser: { select: { name: true, division: { select: { name: true } } } },
+      },
+    }),
+  );
+
+  const workOrders = results
+    .flatMap((r) => r.value)
+    .sort((a, b) => {
+      const aDue = a.dueDate?.getTime() ?? Infinity;
+      const bDue = b.dueDate?.getTime() ?? Infinity;
+      if (aDue !== bDue) return aDue - bDue;
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    });
 
   return workOrders.map((wo) => ({
     id: wo.id,

@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { AssigneeType, Priority, WorkOrderStatus } from "@prisma/client";
-import { prisma } from "@/lib/db";
+import { prisma, orgDb } from "@/lib/db";
 import { auth } from "@/auth";
 import {
   assignableTypesFor,
@@ -14,6 +14,8 @@ import {
   canManageWorkOrders,
   workOrderScopeWhere,
 } from "@/lib/org-access";
+import { getNasStore, getMigrationsDir } from "@/lib/app-config";
+import { allStoreKeys, deleteWorkOrderCascade, findWorkOrderById } from "@/lib/work-order-tree";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -383,18 +385,35 @@ export async function updateWorkOrderDetails(id: string, formData: FormData) {
 }
 
 export async function deleteWorkOrder(formData: FormData) {
-  await requireManager();
+  const user = await requireManager();
 
   const id = String(formData.get("id") ?? "");
   if (!id) throw new Error("잘못된 요청입니다.");
 
-  const workOrder = await prisma.workOrder.delete({ where: { id } });
+  const store = getNasStore();
+  const migrationsDir = getMigrationsDir();
+  const divisions = await orgDb.division.findMany({ select: { name: true } });
+  const divisionKeys = allStoreKeys(divisions.map((d) => d.name));
+
+  const located = await findWorkOrderById(store, divisionKeys, migrationsDir, id);
+  if (!located) throw new Error("삭제할 업무를 찾을 수 없습니다.");
+  const { projectId, parentId } = located.workOrder;
+
+  const result = await deleteWorkOrderCascade(store, divisionKeys, migrationsDir, id, {
+    name: user.name ?? user.email ?? "",
+    email: user.email ?? "",
+  });
+  if (!result.ok) {
+    throw new Error(
+      `"${result.blockedKey}" 관련 업무를 ${result.lock.holderName}님이 편집 중이라 삭제할 수 없습니다. 잠시 후 다시 시도하세요.`,
+    );
+  }
 
   revalidatePath("/work-orders");
   revalidatePath("/dashboard");
-  revalidatePath(`/projects/${workOrder.projectId}`);
-  if (workOrder.parentId) revalidatePath(`/work-orders/${workOrder.parentId}`);
-  redirect(`/projects/${workOrder.projectId}`);
+  revalidatePath(`/projects/${projectId}`);
+  if (parentId) revalidatePath(`/work-orders/${parentId}`);
+  redirect(`/projects/${projectId}`);
 }
 
 export async function createProject(formData: FormData) {

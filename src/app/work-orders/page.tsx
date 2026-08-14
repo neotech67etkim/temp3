@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/db";
+import { orgDb } from "@/lib/db";
+import { getNasStore, getMigrationsDir } from "@/lib/app-config";
+import { allStoreKeys } from "@/lib/work-order-tree";
+import { queryAllDivisions } from "@/lib/multi-division-query";
 import { canManageWorkOrders, workOrderScopeWhere } from "@/lib/org-access";
 import { formatAssignee } from "@/lib/format";
 import { StatusBadge } from "@/components/status-badge";
@@ -19,36 +22,49 @@ export default async function WorkOrdersPage() {
 
   const canManage = canManageWorkOrders(session.user.role);
 
-  const workOrders = await prisma.workOrder.findMany({
-    where: workOrderScopeWhere(session.user),
-    include: {
-      project: { select: { name: true } },
-      assignedDept: { select: { name: true } },
-      assignedDiv: {
-        select: { name: true, department: { select: { name: true } } },
-      },
-      assignedTeam: {
-        select: {
-          name: true,
-          division: {
-            select: { name: true, department: { select: { name: true } } },
+  const store = getNasStore();
+  const migrationsDir = getMigrationsDir();
+  const divisions = await orgDb.division.findMany({ select: { name: true } });
+  const divisionKeys = allStoreKeys(divisions.map((d) => d.name));
+
+  const results = await queryAllDivisions(store, divisionKeys, migrationsDir, (client) =>
+    client.workOrder.findMany({
+      where: workOrderScopeWhere(session.user),
+      include: {
+        project: { select: { name: true } },
+        assignedDept: { select: { name: true } },
+        assignedDiv: {
+          select: { name: true, department: { select: { name: true } } },
+        },
+        assignedTeam: {
+          select: {
+            name: true,
+            division: {
+              select: { name: true, department: { select: { name: true } } },
+            },
           },
         },
-      },
-      assignedUser: {
-        select: {
-          name: true,
-          department: { select: { name: true } },
-          division: {
-            select: { name: true, department: { select: { name: true } } },
+        assignedUser: {
+          select: {
+            name: true,
+            department: { select: { name: true } },
+            division: {
+              select: { name: true, department: { select: { name: true } } },
+            },
           },
         },
+        createdBy: { select: { name: true } },
       },
-      createdBy: { select: { name: true } },
-    },
-    orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
-    take: 100,
-  });
+    }),
+  );
+
+  const workOrders = results
+    .flatMap((r) => r.value)
+    .sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority.localeCompare(b.priority);
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    })
+    .slice(0, 100);
 
   function resolveGroup(wo: (typeof workOrders)[number]) {
     if (wo.assignedDiv) {
