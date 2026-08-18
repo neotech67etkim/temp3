@@ -353,7 +353,13 @@ export async function updateWorkOrderPriority(id: string, formData: FormData) {
 }
 
 /** 개인에게 할당된 업무를 내 권한 범위 안의 다른 사람에게 이관한다. */
-export async function reassignWorkOrder(id: string, formData: FormData) {
+export type ReassignState = { message: string } | undefined;
+
+export async function reassignWorkOrder(
+  id: string,
+  _prevState: ReassignState,
+  formData: FormData,
+): Promise<ReassignState> {
   const session = await auth();
   if (!session?.user || !canManageWorkOrders(session.user.role)) {
     throw new Error("업무를 이관할 권한이 없습니다.");
@@ -392,7 +398,7 @@ export async function reassignWorkOrder(id: string, formData: FormData) {
     workOrder.assigneeType === AssigneeType.USER &&
     newAssigneeId === workOrder.assignedUserId
   ) {
-    return;
+    return { message: "이미 해당 담당자입니다." };
   }
 
   const target = await orgDb.user.findFirst({
@@ -431,6 +437,8 @@ export async function reassignWorkOrder(id: string, formData: FormData) {
   revalidatePath("/work-orders");
   revalidatePath(`/work-orders/${id}`);
   revalidatePath("/dashboard");
+
+  return { message: `${target.name}님에게 이관되었습니다.` };
 }
 
 export async function updateWorkOrderDetails(id: string, formData: FormData) {

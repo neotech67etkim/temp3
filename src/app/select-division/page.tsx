@@ -24,7 +24,7 @@ export default async function SelectDivisionPage() {
   const current = getActiveContextInfo();
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-8">
+    <div className="mx-auto max-w-3xl px-6 py-8">
       <BackToDashboard />
       <h1 className="text-xl font-semibold text-slate-900">편집할 과 선택</h1>
       <p className="mt-1 text-sm text-slate-500">

@@ -1,7 +1,29 @@
 "use client";
 
-import { reassignWorkOrder } from "@/actions/work-orders";
-import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { useActionState, useEffect } from "react";
+import { useFormStatus } from "react-dom";
+import { reassignWorkOrder, type ReassignState } from "@/actions/work-orders";
+
+function TransferSubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      onClick={(e) => {
+        if (
+          !pending &&
+          !confirm("선택한 담당자에게 이 업무를 이관하시겠습니까?")
+        ) {
+          e.preventDefault();
+        }
+      }}
+      className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+    >
+      {pending ? "이관 처리 중..." : "이관"}
+    </button>
+  );
+}
 
 export function TransferEditor({
   id,
@@ -12,10 +34,21 @@ export function TransferEditor({
   currentUserId: string | null;
   candidates: { id: string; name: string }[];
 }) {
-  const action = reassignWorkOrder.bind(null, id);
+  const boundAction = reassignWorkOrder.bind(null, id);
+  const [state, formAction] = useActionState<ReassignState, FormData>(
+    boundAction,
+    undefined,
+  );
+
+  // NAS 공유 파일 잠금/쓰기 때문에 이관 처리가 몇 초 걸릴 수 있어서,
+  // 처리 중에는 버튼을 "이관 처리 중..."으로 바꿔 보여주고(TransferSubmitButton),
+  // 완료되면 결과를 알림창으로 띄워 사용자가 놓치지 않게 한다.
+  useEffect(() => {
+    if (state?.message) alert(state.message);
+  }, [state]);
 
   return (
-    <form action={action} className="flex items-center gap-2">
+    <form action={formAction} className="flex items-center gap-2">
       <select
         name="assigneeId"
         defaultValue={currentUserId ?? ""}
@@ -27,12 +60,7 @@ export function TransferEditor({
           </option>
         ))}
       </select>
-      <ConfirmSubmitButton
-        confirmMessage="선택한 담당자에게 이 업무를 이관하시겠습니까?"
-        className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-      >
-        이관
-      </ConfirmSubmitButton>
+      <TransferSubmitButton />
     </form>
   );
 }

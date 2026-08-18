@@ -21,7 +21,7 @@ export default async function NewWorkOrderPage({
 
   if (!session?.user || !canManageWorkOrders(session.user.role)) {
     return (
-      <div className="mx-auto max-w-2xl px-6 py-8">
+      <div className="mx-auto max-w-4xl px-6 py-8">
         <BackToDashboard />
         <p className="text-sm text-red-600">업무를 생성할 권한이 없습니다.</p>
       </div>
@@ -60,7 +60,7 @@ export default async function NewWorkOrderPage({
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-8">
+    <div className="mx-auto max-w-4xl px-6 py-8">
       <BackToDashboard />
       <h1 className="text-xl font-semibold text-slate-900">Work Order 할당</h1>
       {parent && (

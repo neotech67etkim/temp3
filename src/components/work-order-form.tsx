@@ -45,7 +45,10 @@ export function WorkOrderForm({
   };
 
   return (
-    <form action={createWorkOrder} className="flex flex-col gap-3">
+    <form
+      action={createWorkOrder}
+      className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+    >
       {parentId && <input type="hidden" name="parentId" value={parentId} />}
 
       <div>
@@ -78,7 +81,7 @@ export function WorkOrderForm({
         />
       </div>
 
-      <div>
+      <div className="sm:col-span-2">
         <label className="mb-1 block text-sm font-medium text-slate-700">
           업무내용 및 참고사항
         </label>
@@ -118,7 +121,7 @@ export function WorkOrderForm({
       </div>
 
       {allowedTypes.length > 1 ? (
-        <div>
+        <div className="sm:col-span-2">
           <label className="mb-1 block text-sm font-medium text-slate-700">
             할당 단위
           </label>
@@ -141,7 +144,7 @@ export function WorkOrderForm({
         <input type="hidden" name="assigneeType" value={assigneeType} />
       )}
 
-      <div>
+      <div className="sm:col-span-2">
         <label className="mb-1 block text-sm font-medium text-slate-700">
           할당 대상
         </label>
@@ -162,7 +165,7 @@ export function WorkOrderForm({
 
       <button
         type="submit"
-        className="mt-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+        className="mt-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 sm:col-span-2"
       >
         업무 할당
       </button>
