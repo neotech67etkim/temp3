@@ -22,6 +22,11 @@ export default async function SelectDivisionPage() {
   );
 
   const current = getActiveContextInfo();
+  const isMine = current?.holder.email === session.user.email;
+  // 이 프로세스(프로그램)가 이미 다른 사람의 편집 세션으로 차 있으면, 어느
+  // 과를 고르든 새로 열 수 없다(활성 클라이언트가 프로세스 전역이라
+  // 새로 열면 그 사람의 연결이 끊겨 저장/취소를 못 하게 되어버림).
+  const processBlockedByOther = !!current && !isMine && current.mode === "edit";
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
@@ -34,11 +39,19 @@ export default async function SelectDivisionPage() {
         사람만 같은 과를 편집할 수 있습니다.
       </p>
 
-      {current && (
+      {current && isMine && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           현재 <strong>{current.key}</strong>
           {current.mode === "edit" ? "를 편집 중입니다" : "를 보기 전용으로 열람 중입니다"}
           . 다른 과로 바꾸려면 먼저 저장하거나 취소하세요.
+        </div>
+      )}
+
+      {processBlockedByOther && (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          지금 이 프로그램은 <strong>{current!.holder.name}</strong>님이{" "}
+          <strong>{current!.key}</strong>를 편집 중입니다. 그분이 저장하거나
+          취소해서 편집을 마치기 전까지는 다른 과를 새로 편집할 수 없습니다.
         </div>
       )}
 
@@ -50,6 +63,8 @@ export default async function SelectDivisionPage() {
         <div className="mt-6 flex flex-col gap-3">
           {options.map((o) => {
             const lock = lockStatuses[o.key];
+            const stale = lock ? store.isLockStale(lock) : false;
+            const unavailable = processBlockedByOther || (!!lock && !stale);
             return (
               <div
                 key={o.key}
@@ -59,14 +74,18 @@ export default async function SelectDivisionPage() {
                   <p className="text-sm font-medium text-slate-800">{o.label}</p>
                   {lock ? (
                     <p className="mt-0.5 text-xs text-red-500">
-                      {lock.holderName}님이 편집 중 (
+                      {lock.holderName}님이 {stale ? "오래 전 편집 시작(응답 없음)" : "편집 중"} (
                       {new Date(lock.acquiredAt).toLocaleString("ko-KR")}부터)
                     </p>
                   ) : (
                     <p className="mt-0.5 text-xs text-slate-400">현재 편집 중인 사람 없음</p>
                   )}
                 </div>
-                <EditSessionForm divisionKey={o.key} locked={!!lock} />
+                <EditSessionForm
+                  divisionKey={o.key}
+                  locked={!!lock}
+                  unavailable={unavailable}
+                />
               </div>
             );
           })}

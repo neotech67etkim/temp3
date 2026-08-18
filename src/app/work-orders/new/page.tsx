@@ -30,7 +30,11 @@ export default async function NewWorkOrderPage({
 
   const isAdmin = session.user.role === "ADMIN";
   const allowedTypes = assignableTypesFor(session.user.role);
-  const isEditing = getActiveContextInfo()?.mode === "edit";
+  const activeContext = getActiveContextInfo();
+  // mode==="edit"만으로는 다른 사람의 편집 세션과 구분이 안 되므로 소유자까지 확인한다.
+  const isEditing =
+    activeContext?.mode === "edit" &&
+    activeContext.holder.email === session.user.email;
 
   const [projects, departments, divisions, teams, users] = await Promise.all([
     orgDb.project.findMany({ orderBy: { name: "asc" } }),

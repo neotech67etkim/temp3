@@ -25,6 +25,21 @@ export async function startEditSession(
   const force = formData.get("force") === "on";
   if (!key) return "편집할 과를 선택하세요.";
 
+  // 이 프로세스(=이 PC의 프로그램)에 이미 다른 사람의 편집 세션이 열려 있으면
+  // 새 편집 세션을 시작할 수 없다. 편집 활성 클라이언트는 프로세스 전역
+  // 상태라서, 여기서 새로 열어버리면 그 사람의 편집 세션 연결이 그대로
+  // 끊겨(파일 잠금은 남은 채) 저장도 취소도 할 수 없는 상태로 방치된다.
+  // 실제 배포(PC 1대 = 사용자 1명)에서는 애초에 벌어지지 않는 상황이지만,
+  // 한 PC/브라우저에서 계정을 바꿔가며 쓰는 경우를 안전하게 막아준다.
+  const current = getActiveContextInfo();
+  if (
+    current &&
+    current.mode === "edit" &&
+    current.holder.email !== session.user.email
+  ) {
+    return `지금 이 프로그램은 ${current.holder.name}님이 "${current.key}"를 편집 중입니다. 그분이 저장하거나 취소해서 편집을 마친 뒤 다시 시도해주세요.`;
+  }
+
   const allDivisions = await orgDb.division.findMany({
     select: { id: true, name: true, departmentId: true },
   });
@@ -59,6 +74,11 @@ export async function endEditSession(formData: FormData) {
   const info = getActiveContextInfo();
   if (!info) {
     redirect("/select-division");
+  }
+  if (info.holder.email !== session.user.email) {
+    throw new Error(
+      `이 편집 세션은 ${info.holder.name}님이 시작했습니다. 본인이 시작한 편집만 저장/취소할 수 있습니다.`,
+    );
   }
 
   const ctx = buildContext();

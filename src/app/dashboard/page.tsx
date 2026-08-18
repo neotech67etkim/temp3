@@ -35,7 +35,14 @@ export default async function DashboardPage() {
   const canDelegate = session?.user
     ? canManageWorkOrders(session.user.role)
     : false;
-  const isEditing = getActiveContextInfo()?.mode === "edit";
+  const activeContext = getActiveContextInfo();
+  // mode === "edit"만으로는 부족하다 - 활성 클라이언트는 프로세스 전역이라,
+  // 다른 사람이 시작한 편집 세션이 있어도 이 값은 그대로 "edit"가 된다.
+  // 지금 로그인한 사람이 실제로 그 세션을 시작한 사람인지까지 확인해야
+  // "내가 편집 중"이라고 폼을 보여줘도 되는지 알 수 있다.
+  const isEditing =
+    activeContext?.mode === "edit" &&
+    activeContext.holder.email === session?.user?.email;
 
   const store = getNasStore();
   const migrationsDir = getMigrationsDir();

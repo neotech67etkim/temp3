@@ -23,12 +23,22 @@ import {
   updateDescendantsProjectId,
 } from "@/lib/work-order-tree";
 
-/** 지금 편집 세션이 열려 있는지 확인한다(없으면 /select-division으로 유도). */
-function requireActiveEditSession(): void {
+/**
+ * 지금 편집 세션이 열려 있는지, 그리고 그 세션을 시작한 사람이 지금 요청을
+ * 보낸 사람과 같은지 확인한다(없으면 /select-division으로 유도). 활성
+ * 클라이언트는 프로세스 전역 상태라서, 이 확인이 없으면 다른 사람이 시작한
+ * 편집 세션에 대고 마치 자기 편집인 것처럼 내용을 바꿔버릴 수 있다.
+ */
+function requireActiveEditSession(userEmail: string): void {
   const info = getActiveContextInfo();
   if (!info || info.mode !== "edit") {
     throw new Error(
       "지금 편집 중인 과가 없습니다. 화면 상단의 '편집 시작'에서 편집할 과를 먼저 선택하세요.",
+    );
+  }
+  if (info.holder.email !== userEmail) {
+    throw new Error(
+      `이 편집 세션은 ${info.holder.name}님이 시작했습니다. 본인이 시작한 편집만 내용을 바꿀 수 있습니다.`,
     );
   }
 }
@@ -126,7 +136,7 @@ export async function createWorkOrder(formData: FormData) {
     throw new Error("해당 단위로 할당할 권한이 없습니다.");
   }
 
-  requireActiveEditSession();
+  requireActiveEditSession(user.email ?? "");
   const expectedKey = await resolveTargetDivisionKey(assigneeType, assigneeId);
   const activeKey = getActiveContextInfo()!.key;
   if (expectedKey && expectedKey !== activeKey) {
@@ -183,7 +193,7 @@ export async function createMyTodo(formData: FormData) {
     throw new Error("제목과 프로젝트를 입력하세요.");
   }
 
-  requireActiveEditSession();
+  requireActiveEditSession(session.user.email ?? "");
   const expectedKey = session.user.divisionId
     ? (await orgDb.division.findUnique({ where: { id: session.user.divisionId } }))?.name
     : DEPT_COMMON_KEY;
@@ -213,7 +223,7 @@ export async function createMyTodo(formData: FormData) {
 export async function updateWorkOrderStatus(id: string, formData: FormData) {
   const session = await auth();
   if (!session?.user) throw new Error("로그인이 필요합니다.");
-  requireActiveEditSession();
+  requireActiveEditSession(session.user.email ?? "");
 
   const status = formData.get("status") as WorkOrderStatus;
 
@@ -240,7 +250,7 @@ export async function updateWorkOrderStatus(id: string, formData: FormData) {
 export async function updateWorkOrderProgress(id: string, formData: FormData) {
   const session = await auth();
   if (!session?.user) throw new Error("로그인이 필요합니다.");
-  requireActiveEditSession();
+  requireActiveEditSession(session.user.email ?? "");
 
   const progress = Number(formData.get("progress"));
   const clamped = Math.max(0, Math.min(100, Math.round(progress)));
@@ -276,7 +286,7 @@ export async function updateWorkOrderProgress(id: string, formData: FormData) {
 export async function addWorkOrderLog(workOrderId: string, formData: FormData) {
   const session = await auth();
   if (!session?.user) throw new Error("로그인이 필요합니다.");
-  requireActiveEditSession();
+  requireActiveEditSession(session.user.email ?? "");
 
   const note = String(formData.get("note") ?? "").trim();
   const filePath = String(formData.get("filePath") ?? "").trim() || null;
@@ -331,7 +341,7 @@ export async function addWorkOrderLog(workOrderId: string, formData: FormData) {
 export async function updateWorkOrderPriority(id: string, formData: FormData) {
   const session = await auth();
   if (!session?.user) throw new Error("로그인이 필요합니다.");
-  requireActiveEditSession();
+  requireActiveEditSession(session.user.email ?? "");
 
   const priority = formData.get("priority") as Priority;
 
@@ -364,7 +374,7 @@ export async function reassignWorkOrder(
   if (!session?.user || !canManageWorkOrders(session.user.role)) {
     throw new Error("업무를 이관할 권한이 없습니다.");
   }
-  requireActiveEditSession();
+  requireActiveEditSession(session.user.email ?? "");
 
   const newAssigneeId = String(formData.get("assigneeId") ?? "");
   if (!newAssigneeId) throw new Error("이관할 담당자를 선택하세요.");
@@ -443,7 +453,7 @@ export async function reassignWorkOrder(
 
 export async function updateWorkOrderDetails(id: string, formData: FormData) {
   const user = await requireManager();
-  requireActiveEditSession();
+  requireActiveEditSession(user.email ?? "");
 
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || null;

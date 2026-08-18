@@ -6,7 +6,7 @@
 import { NasStore, type LockInfo } from "./nas-store";
 import { syncOrgInto } from "./org-sync";
 import { setActiveDb, clearActiveDb, orgDb } from "./db";
-export { getActiveContextInfo, type ActiveContextInfo } from "./db";
+export { getActiveContextInfo, type ActiveContextInfo, type ActiveHolder } from "./db";
 
 export type OpenForEditResult =
   | { ok: true }
@@ -31,7 +31,7 @@ export class ActiveContext {
     if (!localPath) throw new Error("체크아웃에 실패했습니다(localPath 없음).");
 
     await syncOrgInto(this.orgDbPath(), localPath, this.migrationsDir);
-    setActiveDb(localPath, key, "edit");
+    setActiveDb(localPath, key, "edit", holder);
     return { ok: true };
   }
 
@@ -51,14 +51,17 @@ export class ActiveContext {
    * 모니터링(읽기 전용) 모드로 한 과를 연다: 잠금 없이 최신본을 로컬로 복사해서
    * 조직도까지 동기화한 뒤 활성 DB로 설정한다. 편집은 불가(호출자가 UI에서 막아야 함).
    */
-  async openReadOnly(key: string): Promise<void> {
+  async openReadOnly(
+    key: string,
+    holder: { name: string; email: string },
+  ): Promise<void> {
     const paths = this.store.checkoutReadOnly([key]);
     const localPath = paths[key];
     if (!localPath) {
       throw new Error(`아직 생성된 적 없는 과입니다: ${key}`);
     }
     await syncOrgInto(this.orgDbPath(), localPath, this.migrationsDir);
-    setActiveDb(localPath, key, "readonly");
+    setActiveDb(localPath, key, "readonly", holder);
   }
 
   /** 현재 잠금 상태 조회(편집 시작 전 UI에 "○○님이 편집 중" 표시용). */

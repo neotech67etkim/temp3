@@ -12,12 +12,15 @@ import { PrismaClient } from "@prisma/client";
 
 export type ActiveMode = "edit" | "readonly";
 
+export type ActiveHolder = { name: string; email: string };
+
 const globalForDb = globalThis as unknown as {
   __orgDb: PrismaClient | undefined;
   __activeClient: PrismaClient | undefined;
   __activeDbPath: string | undefined;
   __activeKey: string | undefined;
   __activeMode: ActiveMode | undefined;
+  __activeHolder: ActiveHolder | undefined;
 };
 
 export function resolveOrgDbPath(): string {
@@ -62,11 +65,27 @@ export const orgDb: PrismaClient = new Proxy({} as PrismaClient, {
   },
 });
 
-/** 현재 활성화된(체크아웃된) 과 파일 경로/키/모드를 바꾼다. 같은 경로면 아무것도 안 함. */
-export function setActiveDb(dbPath: string, key: string, mode: ActiveMode): void {
+/**
+ * 현재 활성화된(체크아웃된) 과 파일 경로/키/모드/소유자를 바꾼다. 같은 경로면 클라이언트는
+ * 재사용하고 메타데이터만 갱신한다.
+ *
+ * holder(누가 이 세션을 시작했는지)를 함께 저장해두는 이유: 이 활성 클라이언트는
+ * Node 프로세스 전역 상태라서(한 PC = 한 사용자를 전제로 한 설계), 원칙적으로는
+ * 한 프로세스에 한 명만 접속해 있어야 한다. 하지만 같은 브라우저/프로세스에서 계정을
+ * 바꿔가며 테스트하는 경우처럼 여러 사용자가 실제로 한 프로세스를 거쳐가면, holder
+ * 정보가 없으면 "지금 로그인한 사람"과 "실제로 편집을 시작한 사람"을 구분할 방법이
+ * 없어서, 다른 사람이 남의 편집 세션을 그대로 저장/취소해버릴 수 있다.
+ */
+export function setActiveDb(
+  dbPath: string,
+  key: string,
+  mode: ActiveMode,
+  holder: ActiveHolder,
+): void {
   if (globalForDb.__activeDbPath === dbPath && globalForDb.__activeClient) {
     globalForDb.__activeKey = key;
     globalForDb.__activeMode = mode;
+    globalForDb.__activeHolder = holder;
     return;
   }
   const old = globalForDb.__activeClient;
@@ -76,6 +95,7 @@ export function setActiveDb(dbPath: string, key: string, mode: ActiveMode): void
   globalForDb.__activeDbPath = dbPath;
   globalForDb.__activeKey = key;
   globalForDb.__activeMode = mode;
+  globalForDb.__activeHolder = holder;
   if (old) {
     void old.$disconnect();
   }
@@ -85,12 +105,22 @@ export function getActiveDbPath(): string | null {
   return globalForDb.__activeDbPath ?? null;
 }
 
-export type ActiveContextInfo = { key: string; mode: ActiveMode };
+export type ActiveContextInfo = {
+  key: string;
+  mode: ActiveMode;
+  holder: ActiveHolder;
+};
 
-/** 현재 어떤 과를 어떤 모드(편집/보기)로 열어 두었는지. 아무것도 안 열려 있으면 null. */
+/** 현재 어떤 과를 어떤 모드(편집/보기)로, 누가 열어 두었는지. 아무것도 안 열려 있으면 null. */
 export function getActiveContextInfo(): ActiveContextInfo | null {
-  if (!globalForDb.__activeKey || !globalForDb.__activeMode) return null;
-  return { key: globalForDb.__activeKey, mode: globalForDb.__activeMode };
+  if (!globalForDb.__activeKey || !globalForDb.__activeMode || !globalForDb.__activeHolder) {
+    return null;
+  }
+  return {
+    key: globalForDb.__activeKey,
+    mode: globalForDb.__activeMode,
+    holder: globalForDb.__activeHolder,
+  };
 }
 
 export function clearActiveDb(): void {
@@ -99,6 +129,7 @@ export function clearActiveDb(): void {
   globalForDb.__activeDbPath = undefined;
   globalForDb.__activeKey = undefined;
   globalForDb.__activeMode = undefined;
+  globalForDb.__activeHolder = undefined;
   if (old) void old.$disconnect();
 }
 

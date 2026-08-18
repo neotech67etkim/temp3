@@ -14,7 +14,11 @@ import { EditModeNotice } from "@/components/edit-mode-notice";
 export default async function ProjectsPage() {
   const session = await auth();
   const canManage = session?.user ? canManageWorkOrders(session.user.role) : false;
-  const isEditing = getActiveContextInfo()?.mode === "edit";
+  const activeContext = getActiveContextInfo();
+  // mode==="edit"만으로는 다른 사람의 편집 세션과 구분이 안 되므로 소유자까지 확인한다.
+  const isEditing =
+    activeContext?.mode === "edit" &&
+    activeContext.holder.email === session?.user?.email;
 
   // Project/Category는 division 파일이 아니라 조직 원본(org.db)에 있으므로
   // orgDb로 읽고, 각 프로젝트의 진행률 계산에 필요한 WorkOrder만 전체 과

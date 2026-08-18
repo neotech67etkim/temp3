@@ -65,7 +65,11 @@ export default async function WorkOrderDetailPage({
   const rollupProgress = progressMap.get(workOrder.id) ?? workOrder.progress;
 
   const canManage = canManageWorkOrders(session.user.role);
-  const isEditing = getActiveContextInfo()?.mode === "edit";
+  const activeContext = getActiveContextInfo();
+  // mode==="edit"만으로는 다른 사람의 편집 세션과 구분이 안 되므로 소유자까지 확인한다.
+  const isEditing =
+    activeContext?.mode === "edit" &&
+    activeContext.holder.email === session.user.email;
   const isAssignedToMe = workOrder.assignedUserId === session.user.id;
   const hasChildren = children.length > 0;
 

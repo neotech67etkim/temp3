@@ -21,6 +21,12 @@ export async function Nav() {
   ];
 
   const context = getActiveContextInfo();
+  const isMyEditSession =
+    context?.mode === "edit" && context.holder.email === session.user.email;
+  const othersEditSession =
+    context?.mode === "edit" && context.holder.email !== session.user.email
+      ? context
+      : null;
 
   return (
     <header className="border-b border-slate-200 bg-white">
@@ -42,7 +48,7 @@ export async function Nav() {
           </nav>
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-500">
-          {context && context.mode === "edit" ? (
+          {isMyEditSession && context ? (
             <form action={endEditSession} className="flex items-center gap-2">
               <span className="rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">
                 편집 중: {context.key}
@@ -62,6 +68,13 @@ export async function Nav() {
                 취소
               </button>
             </form>
+          ) : othersEditSession ? (
+            <span
+              className="rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700"
+              title="편집을 시작한 사람만 저장/취소할 수 있습니다"
+            >
+              {othersEditSession.holder.name}님이 {othersEditSession.key} 편집 중
+            </span>
           ) : (
             <Link
               href="/select-division"

@@ -159,6 +159,12 @@ export class NasStore {
     return this.readLock(key);
   }
 
+  /** 이 잠금이 오래돼서(응답 없음) 강제 해제 후보인지 여부(UI에서 "편집불가" vs
+   *  "강제로 이어받기"를 구분해 보여줄 때 씀). */
+  isLockStale(lock: LockInfo): boolean {
+    return this.isStale(lock);
+  }
+
   /**
    * 편집 잠금을 원자적으로 획득한다.
    * - 잠금 파일이 없으면 즉시 생성하고 성공.
