@@ -20,7 +20,8 @@ import {
   canManageWorkOrders,
   workOrderScopeWhere,
 } from "@/lib/org-access";
-import { getNasStore, getMigrationsDir } from "@/lib/app-config";
+import { getNasStore, getNasStoreConfig, getMigrationsDir } from "@/lib/app-config";
+import { exportDivisionForCopilot } from "@/lib/copilot-export";
 import {
   DEPT_COMMON_KEY,
   allStoreKeys,
@@ -84,6 +85,17 @@ async function switchToHeldDivisionOf(id: string): Promise<string | null> {
  */
 function syncDivision(key: string): void {
   getNasStore().syncToRemote(key);
+
+  // Copilot(사내 M365)이 나중에 SharePoint를 통해 읽을 수 있도록, 같은 시점에
+  // 이 과의 업무 현황/변경 이력 Markdown 문서도 NAS에 함께 갱신해둔다. 이
+  // export가 실패해도 방금 끝난 실제 저장(위 syncToRemote)에는 영향이 없어야
+  // 하므로, 에러는 콘솔에만 남기고 액션 자체는 그대로 성공 처리한다.
+  const client = getHeldClient(key);
+  if (client) {
+    void exportDivisionForCopilot(client, key, getNasStoreConfig().nasRoot).catch((err) => {
+      console.error(`[copilot-export] "${key}" 내보내기 실패:`, err);
+    });
+  }
 }
 
 /** id가 지금 편집 세션에 없는 과에 있을 때 보여줄 안내 메시지를 만든다. */
