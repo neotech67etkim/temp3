@@ -11,6 +11,7 @@ import { PrismaClient, type WorkOrder } from "@prisma/client";
 import { NasStore, type LockInfo } from "./nas-store";
 import { queryAllDivisions } from "./multi-division-query";
 import { ensureSchema } from "./schema-init";
+import { getHeldClient } from "./db";
 
 export const DEPT_COMMON_KEY = "__부서공통__";
 
@@ -261,6 +262,16 @@ export async function updateDescendantsProjectId(
   }
 
   for (const key of keys) {
+    // 이미 편집 세션이 들고 있는 과는 그 세션이 열어 둔 커넥션을 그대로 쓴다 -
+    // 같은 로컬 SQLite 파일에 별도 커넥션을 새로 열면 불필요하고 충돌 위험도 있다.
+    const held = alreadyHeldKeys.includes(key) ? getHeldClient(key) : null;
+    if (held) {
+      await held.workOrder.updateMany({
+        where: { id: { in: idsByKey.get(key)! } },
+        data: { projectId: newProjectId },
+      });
+      continue;
+    }
     const localPath = store.localDbPath(key);
     await ensureSchema(localPath, migrationsDir);
     const client = new PrismaClient({ datasourceUrl: `file:${localPath}` });
@@ -276,6 +287,11 @@ export async function updateDescendantsProjectId(
 
   for (const key of keysToAcquire) {
     store.checkinAfterEdit(key);
+  }
+  // 편집 세션이 계속 들고 있을 과는 잠금은 유지한 채로 즉시 원본에 반영한다
+  // ("저장하고 종료"를 누르기 전에 문제가 생겨도 변경이 남아있도록).
+  for (const key of keys.filter((k) => alreadyHeldKeys.includes(k))) {
+    store.syncToRemote(key);
   }
 
   return { ok: true };
@@ -298,6 +314,7 @@ export async function deleteWorkOrderCascade(
   migrationsDir: string,
   id: string,
   holder: { name: string; email: string },
+  alreadyHeldKeys: string[] = [],
 ): Promise<CascadeDeleteResult> {
   const target = await findWorkOrderById(store, divisionKeys, migrationsDir, id);
   if (!target) {
@@ -312,9 +329,14 @@ export async function deleteWorkOrderCascade(
     idsByKey.get(item.key)!.push(item.workOrder.id);
   }
   const keys = [...idsByKey.keys()];
+  // 이미 편집 세션이 들고 있는 과(alreadyHeldKeys)는 그 세션의 잠금을 그대로
+  // 쓰면 되므로 다시 잠그려 하지 않는다 - 안 그러면 "이미 내가 잠근 파일"을
+  // 다시 잠그려다 실패해버린다(acquireLock은 누가 잡고 있든 상관없이 이미
+  // 잠긴 파일이면 실패로 취급함).
+  const keysToAcquire = keys.filter((k) => !alreadyHeldKeys.includes(k));
 
   const acquiredKeys: string[] = [];
-  for (const key of keys) {
+  for (const key of keysToAcquire) {
     const { result } = store.checkoutForEdit(key, holder);
     if (!result.ok) {
       for (const acquiredKey of acquiredKeys) {
@@ -327,6 +349,14 @@ export async function deleteWorkOrderCascade(
 
   let deletedCount = 0;
   for (const key of keys) {
+    const held = alreadyHeldKeys.includes(key) ? getHeldClient(key) : null;
+    if (held) {
+      const result = await held.workOrder.deleteMany({
+        where: { id: { in: idsByKey.get(key)! } },
+      });
+      deletedCount += result.count;
+      continue;
+    }
     const localPath = store.localDbPath(key);
     await ensureSchema(localPath, migrationsDir);
     const client = new PrismaClient({ datasourceUrl: `file:${localPath}` });
@@ -340,8 +370,11 @@ export async function deleteWorkOrderCascade(
     }
   }
 
-  for (const key of keys) {
+  for (const key of keysToAcquire) {
     store.checkinAfterEdit(key);
+  }
+  for (const key of keys.filter((k) => alreadyHeldKeys.includes(k))) {
+    store.syncToRemote(key);
   }
 
   return { ok: true, deletedCount };

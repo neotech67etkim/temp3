@@ -66,10 +66,13 @@ export default async function WorkOrderDetailPage({
 
   const canManage = canManageWorkOrders(session.user.role);
   const activeContext = getActiveContextInfo();
-  // mode==="edit"만으로는 다른 사람의 편집 세션과 구분이 안 되므로 소유자까지 확인한다.
+  // mode==="edit" + 소유자 확인만으로는 부족하다 - 부서장처럼 여러 과를
+  // 동시에 들고 있을 수 있으므로, "지금 이 업무가 속한 과(workOrder.key)"가
+  // 실제로 보유 목록에 있는지까지 확인해야 편집 컨트롤을 보여줘도 된다.
   const isEditing =
     activeContext?.mode === "edit" &&
-    activeContext.holder.email === session.user.email;
+    activeContext.holder.email === session.user.email &&
+    activeContext.keys.includes(workOrder.key);
   const isAssignedToMe = workOrder.assignedUserId === session.user.id;
   const hasChildren = children.length > 0;
   const returnTo = `/work-orders/${workOrder.id}`;

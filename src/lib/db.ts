@@ -14,14 +14,23 @@ export type ActiveMode = "edit" | "readonly";
 
 export type ActiveHolder = { name: string; email: string };
 
+export type UnavailableDivision = { key: string; holderName: string };
+
+type HeldEntry = { client: PrismaClient; dbPath: string };
+
 const globalForDb = globalThis as unknown as {
   __orgDb: PrismaClient | undefined;
-  __activeClient: PrismaClient | undefined;
-  __activeDbPath: string | undefined;
-  __activeKey: string | undefined;
-  __activeMode: ActiveMode | undefined;
-  __activeHolder: ActiveHolder | undefined;
+  __held: Map<string, HeldEntry> | undefined;
+  __currentKey: string | undefined;
+  __mode: ActiveMode | undefined;
+  __holder: ActiveHolder | undefined;
+  __unavailable: UnavailableDivision[] | undefined;
 };
+
+function heldMap(): Map<string, HeldEntry> {
+  if (!globalForDb.__held) globalForDb.__held = new Map();
+  return globalForDb.__held;
+}
 
 export function resolveOrgDbPath(): string {
   // ORG_DB_PATH를 명시적으로 지정했으면 그걸 우선 사용.
@@ -66,80 +75,122 @@ export const orgDb: PrismaClient = new Proxy({} as PrismaClient, {
 });
 
 /**
- * 현재 활성화된(체크아웃된) 과 파일 경로/키/모드/소유자를 바꾼다. 같은 경로면 클라이언트는
- * 재사용하고 메타데이터만 갱신한다.
+ * 편집/열람 세션에 과 하나를 추가로 연다(이미 열려 있으면 그대로 재사용하고
+ * "지금 prisma가 가리키는 대상"만 이 과로 옮긴다).
  *
- * holder(누가 이 세션을 시작했는지)를 함께 저장해두는 이유: 이 활성 클라이언트는
- * Node 프로세스 전역 상태라서(한 PC = 한 사용자를 전제로 한 설계), 원칙적으로는
- * 한 프로세스에 한 명만 접속해 있어야 한다. 하지만 같은 브라우저/프로세스에서 계정을
- * 바꿔가며 테스트하는 경우처럼 여러 사용자가 실제로 한 프로세스를 거쳐가면, holder
- * 정보가 없으면 "지금 로그인한 사람"과 "실제로 편집을 시작한 사람"을 구분할 방법이
- * 없어서, 다른 사람이 남의 편집 세션을 그대로 저장/취소해버릴 수 있다.
+ * 예전에는 이 프로세스가 한 번에 딱 하나의 과 파일만 붙잡을 수 있었다. 하지만
+ * 부서장처럼 여러 과를 동시에 관리하는 사람이 업무마다 매번 "편집 시작"을
+ * 새로 눌러야 하는 게 번거로워서, 이제는 여러 과를 동시에 "보유"할 수 있고
+ * (held), 그중 어느 것으로 실제 쿼리를 보낼지만 currentKey로 전환한다.
+ *
+ * holder(누가 이 세션을 시작했는지)를 함께 저장해두는 이유: 이 상태는 Node
+ * 프로세스 전역이라서(한 PC = 한 사용자를 전제로 한 설계), 같은 브라우저/
+ * 프로세스에서 계정을 바꿔가며 테스트하는 경우처럼 여러 사용자가 실제로 한
+ * 프로세스를 거쳐가면 holder 정보가 없으면 "지금 로그인한 사람"과 "실제로
+ * 편집을 시작한 사람"을 구분할 방법이 없어서, 다른 사람이 남의 편집 세션을
+ * 그대로 저장/취소해버릴 수 있다.
  */
-export function setActiveDb(
-  dbPath: string,
+export function openHeldDivision(
   key: string,
+  dbPath: string,
   mode: ActiveMode,
   holder: ActiveHolder,
 ): void {
-  if (globalForDb.__activeDbPath === dbPath && globalForDb.__activeClient) {
-    globalForDb.__activeKey = key;
-    globalForDb.__activeMode = mode;
-    globalForDb.__activeHolder = holder;
-    return;
+  const held = heldMap();
+  const existing = held.get(key);
+  if (!existing || existing.dbPath !== dbPath) {
+    if (existing) void existing.client.$disconnect();
+    held.set(key, { client: new PrismaClient({ datasourceUrl: `file:${dbPath}` }), dbPath });
   }
-  const old = globalForDb.__activeClient;
-  globalForDb.__activeClient = new PrismaClient({
-    datasourceUrl: `file:${dbPath}`,
-  });
-  globalForDb.__activeDbPath = dbPath;
-  globalForDb.__activeKey = key;
-  globalForDb.__activeMode = mode;
-  globalForDb.__activeHolder = holder;
-  if (old) {
-    void old.$disconnect();
-  }
+  globalForDb.__currentKey = key;
+  globalForDb.__mode = mode;
+  globalForDb.__holder = holder;
+}
+
+/** 이미 보유 중인 과들 중 하나로 "지금 prisma가 가리키는 대상"만 바꾼다(새로 열거나 잠그지 않음). */
+export function switchCurrentDivision(key: string): boolean {
+  if (!heldMap().has(key)) return false;
+  globalForDb.__currentKey = key;
+  return true;
+}
+
+export function isDivisionHeld(key: string): boolean {
+  return heldMap().has(key);
+}
+
+/** 이 키로 이미 열려 있는 클라이언트를 직접 가져온다(여러 과를 뒤져서 id가 어디
+ *  있는지 찾을 때처럼, "지금 가리키는 대상"과 무관하게 개별 과에 접근해야 할 때 씀). */
+export function getHeldClient(key: string): PrismaClient | null {
+  return heldMap().get(key)?.client ?? null;
 }
 
 export function getActiveDbPath(): string | null {
-  return globalForDb.__activeDbPath ?? null;
+  const key = globalForDb.__currentKey;
+  if (!key) return null;
+  return heldMap().get(key)?.dbPath ?? null;
 }
 
 export type ActiveContextInfo = {
-  key: string;
+  /** 지금 보유 중인 모든 과. */
+  keys: string[];
+  /** 그중 지금 prisma가 실제로 가리키는 과. */
+  currentKey: string | null;
   mode: ActiveMode;
   holder: ActiveHolder;
 };
 
-/** 현재 어떤 과를 어떤 모드(편집/보기)로, 누가 열어 두었는지. 아무것도 안 열려 있으면 null. */
+/** 지금 어떤 과들을 어떤 모드(편집/보기)로, 누가 열어 두었는지. 아무것도 안 열려 있으면 null. */
 export function getActiveContextInfo(): ActiveContextInfo | null {
-  if (!globalForDb.__activeKey || !globalForDb.__activeMode || !globalForDb.__activeHolder) {
-    return null;
-  }
+  const held = heldMap();
+  if (held.size === 0 || !globalForDb.__mode || !globalForDb.__holder) return null;
   return {
-    key: globalForDb.__activeKey,
-    mode: globalForDb.__activeMode,
-    holder: globalForDb.__activeHolder,
+    keys: [...held.keys()],
+    currentKey: globalForDb.__currentKey ?? null,
+    mode: globalForDb.__mode,
+    holder: globalForDb.__holder,
   };
 }
 
-export function clearActiveDb(): void {
-  const old = globalForDb.__activeClient;
-  globalForDb.__activeClient = undefined;
-  globalForDb.__activeDbPath = undefined;
-  globalForDb.__activeKey = undefined;
-  globalForDb.__activeMode = undefined;
-  globalForDb.__activeHolder = undefined;
-  if (old) void old.$disconnect();
+/** 과 하나만 닫는다(저장/취소 뒤 호출). 보유한 과가 더 이상 없으면 세션 전체가 정리된다. */
+export function closeHeldDivision(key: string): void {
+  const held = heldMap();
+  const entry = held.get(key);
+  if (entry) {
+    void entry.client.$disconnect();
+    held.delete(key);
+  }
+  if (globalForDb.__currentKey === key) {
+    globalForDb.__currentKey = held.size > 0 ? [...held.keys()][0] : undefined;
+  }
+  if (held.size === 0) {
+    globalForDb.__mode = undefined;
+    globalForDb.__holder = undefined;
+  }
+}
+
+export function closeAllHeldDivisions(): void {
+  for (const key of [...heldMap().keys()]) closeHeldDivision(key);
+}
+
+/** "전체 편집 시작"에서 이번에 못 연 과(다른 사람이 편집 중)를 기록해둔다 -
+ *  select-division/nav 화면에서 "OOO가 편집중입니다"로 보여주기 위함. */
+export function setUnavailableDivisions(list: UnavailableDivision[]): void {
+  globalForDb.__unavailable = list;
+}
+
+export function getUnavailableDivisions(): UnavailableDivision[] {
+  return globalForDb.__unavailable ?? [];
 }
 
 function requireActiveClient(): PrismaClient {
-  if (!globalForDb.__activeClient) {
+  const key = globalForDb.__currentKey;
+  const entry = key ? heldMap().get(key) : undefined;
+  if (!entry) {
     throw new Error(
       "아직 편집/열람할 과 파일이 선택되지 않았습니다. 먼저 과를 체크아웃하세요.",
     );
   }
-  return globalForDb.__activeClient;
+  return entry.client;
 }
 
 /**

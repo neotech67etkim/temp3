@@ -251,7 +251,6 @@ export class NasStore {
   checkinAfterEdit(key: string): void {
     const localPath = this.localDbPath(key);
     const remotePath = this.remoteDbPath(key);
-    const tmpPath = `${remotePath}.tmp-${process.pid}-${Date.now()}`;
 
     if (!fs.existsSync(localPath)) {
       throw new Error(`로컬 작업 파일이 없습니다: ${localPath}`);
@@ -272,8 +271,7 @@ export class NasStore {
       this.pruneOldBackups(key);
     }
 
-    fs.copyFileSync(localPath, tmpPath);
-    fs.renameSync(tmpPath, remotePath);
+    this.copyLocalToRemote(key);
     this.releaseLock(key);
 
     this.appendCheckinLog({
@@ -284,6 +282,34 @@ export class NasStore {
       fileSizeBytes: fs.statSync(remotePath).size,
       backupPath,
     });
+  }
+
+  /** 로컬 작업 파일 → 원본으로 임시파일 경유 원자적 복사만 한다(잠금은 그대로 유지). */
+  private copyLocalToRemote(key: string): void {
+    const localPath = this.localDbPath(key);
+    const remotePath = this.remoteDbPath(key);
+    const tmpPath = `${remotePath}.tmp-${process.pid}-${Date.now()}`;
+    fs.copyFileSync(localPath, tmpPath);
+    fs.renameSync(tmpPath, remotePath);
+  }
+
+  /**
+   * 편집 세션을 마치지 않은 상태에서도(잠금 유지한 채) 지금까지의 변경사항을
+   * 원본에 즉시 반영한다. 상태 변경/진행률 입력 같은 개별 작업이 끝날 때마다
+   * 이걸 호출해서, "저장하고 종료"를 누르기 전에 프로그램이 꺼지거나 문제가
+   * 생겨도 마지막으로 즉시 저장된 시점 이후의 변경만 손실되게 한다. 매번
+   * 백업 스냅샷/체크인 로그까지 남기면 너무 잦아지므로, 그건 최종
+   * checkinAfterEdit에서만 한다.
+   */
+  syncToRemote(key: string): void {
+    const localPath = this.localDbPath(key);
+    if (!fs.existsSync(localPath)) {
+      throw new Error(`로컬 작업 파일이 없습니다: ${localPath}`);
+    }
+    if (!this.readLock(key)) {
+      throw new Error(`편집 잠금 없이는 저장할 수 없습니다: ${key}`);
+    }
+    this.copyLocalToRemote(key);
   }
 
   /** 편집을 취소한다: 로컬 변경을 버리고 잠금만 해제한다. */
