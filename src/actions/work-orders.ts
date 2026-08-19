@@ -338,11 +338,15 @@ export async function addWorkOrderLog(workOrderId: string, formData: FormData) {
     }
     const ext = path.extname(image.name) || ".png";
     const filename = `${randomUUID()}${ext}`;
-    const dir = path.join(process.cwd(), "public", "uploads", "work-orders", workOrderId);
+    // public/ 안에 두지 않는다 - next start의 정적 서빙은 서버 시작 시점에
+    // 이미 있던 파일만 인식해서, 서버가 떠 있는 동안 새로 올린 스크린샷은
+    // 재시작 전까지 404가 난다. 대신 /api/uploads 라우트가 매 요청마다
+    // 직접 파일을 읽어서 내려준다(src/app/api/uploads/[...path]/route.ts).
+    const dir = path.join(process.cwd(), "uploads", "work-orders", workOrderId);
     await mkdir(dir, { recursive: true });
     const buffer = Buffer.from(await image.arrayBuffer());
     await writeFile(path.join(dir, filename), buffer);
-    imagePath = `/uploads/work-orders/${workOrderId}/${filename}`;
+    imagePath = `/api/uploads/work-orders/${workOrderId}/${filename}`;
   }
 
   if (!note && !filePath && !imagePath) {
