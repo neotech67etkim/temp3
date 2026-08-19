@@ -3,6 +3,7 @@ import { auth, signOut } from "@/auth";
 import { ROLE_LABEL, canManageOrg } from "@/lib/org-access";
 import { getActiveContextInfo, getUnavailableDivisions } from "@/lib/db";
 import { endEditSession } from "@/actions/context";
+import { IdleAutoEndSession } from "@/components/idle-auto-end-session";
 
 export async function Nav() {
   const session = await auth();
@@ -50,41 +51,44 @@ export async function Nav() {
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-500">
           {isMyEditSession && context ? (
-            <form action={endEditSession} className="flex items-center gap-2">
-              <span
-                className="rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700"
-                title={context.keys.join(", ")}
-              >
-                편집 중:{" "}
-                {context.keys.length === 1
-                  ? context.keys[0]
-                  : `${context.keys[0]} 외 ${context.keys.length - 1}개 과`}
-              </span>
-              <button
-                name="mode"
-                value="save"
-                className="text-xs text-blue-600 hover:underline"
-              >
-                {context.keys.length > 1 ? "전체 저장하고 종료" : "저장하고 종료"}
-              </button>
-              <button
-                name="mode"
-                value="discard"
-                className="text-xs text-slate-400 hover:text-red-600"
-              >
-                취소
-              </button>
-              {unavailable.length > 0 && (
+            <>
+              <IdleAutoEndSession />
+              <form action={endEditSession} className="flex items-center gap-2">
                 <span
-                  className="rounded-full bg-red-50 px-2 py-1 text-xs text-red-600"
-                  title={unavailable
-                    .map((u) => `${u.key}: ${u.holderName}님이 편집 중`)
-                    .join(", ")}
+                  className="rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700"
+                  title={context.keys.join(", ")}
                 >
-                  {unavailable.length}개 과 편집불가
+                  편집 중:{" "}
+                  {context.keys.length === 1
+                    ? context.keys[0]
+                    : `${context.keys[0]} 외 ${context.keys.length - 1}개 과`}
                 </span>
-              )}
-            </form>
+                <button
+                  name="mode"
+                  value="save"
+                  className="text-xs text-blue-600 hover:underline"
+                >
+                  {context.keys.length > 1 ? "전체 저장하고 종료" : "저장하고 종료"}
+                </button>
+                <button
+                  name="mode"
+                  value="discard"
+                  className="text-xs text-slate-400 hover:text-red-600"
+                >
+                  취소
+                </button>
+                {unavailable.length > 0 && (
+                  <span
+                    className="rounded-full bg-red-50 px-2 py-1 text-xs text-red-600"
+                    title={unavailable
+                      .map((u) => `${u.key}: ${u.holderName}님이 편집 중`)
+                      .join(", ")}
+                  >
+                    {unavailable.length}개 과 편집불가
+                  </span>
+                )}
+              </form>
+            </>
           ) : othersEditSession ? (
             <span
               className="rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700"
