@@ -28,7 +28,7 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { WorkOrderLogForm } from "@/components/work-order-log-form";
 import { WorkOrderLogList } from "@/components/work-order-log-list";
 import { TransferEditor } from "@/components/transfer-editor";
-import { EditModeNotice } from "@/components/edit-mode-notice";
+import { SmartEditStart } from "@/components/smart-edit-start";
 
 export default async function WorkOrderDetailPage({
   params,
@@ -72,6 +72,7 @@ export default async function WorkOrderDetailPage({
     activeContext.holder.email === session.user.email;
   const isAssignedToMe = workOrder.assignedUserId === session.user.id;
   const hasChildren = children.length > 0;
+  const returnTo = `/work-orders/${workOrder.id}`;
 
   const canDirectAssign =
     canManage &&
@@ -165,7 +166,11 @@ export default async function WorkOrderDetailPage({
       )}
       {canManage && !isEditing && (
         <div className="mt-3">
-          <EditModeNotice message="이 업무를 수정하거나 삭제하려면" />
+          <SmartEditStart
+            divisionKey={workOrder.key}
+            returnTo={returnTo}
+            message="이 업무를 수정하거나 삭제하려면 먼저 편집을 시작하세요."
+          />
         </div>
       )}
 
@@ -202,7 +207,13 @@ export default async function WorkOrderDetailPage({
 
       {(canManage || isAssignedToMe) && (
         <div className="mt-4 flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-5">
-          {!isEditing && <EditModeNotice message="상태/진행률을 변경하려면" />}
+          {!isEditing && (
+            <SmartEditStart
+              divisionKey={workOrder.key}
+              returnTo={returnTo}
+              message="상태/진행률을 변경하려면 먼저 편집을 시작하세요."
+            />
+          )}
           {isEditing && (
             <>
               <div>
@@ -310,7 +321,11 @@ export default async function WorkOrderDetailPage({
             {isEditing ? (
               <WorkOrderLogForm workOrderId={workOrder.id} />
             ) : (
-              <EditModeNotice message="진행 관련 정보를 남기려면" />
+              <SmartEditStart
+                divisionKey={workOrder.key}
+                returnTo={returnTo}
+                message="진행 관련 정보를 남기려면 먼저 편집을 시작하세요."
+              />
             )}
           </div>
         )}

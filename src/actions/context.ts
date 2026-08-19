@@ -14,6 +14,12 @@ function buildContext() {
   return new ActiveContext(getNasStore(), getMigrationsDir());
 }
 
+/** returnTo가 우리 앱 안의 상대 경로인지 확인한다(오픈 리다이렉트 방지). */
+function safeReturnPath(raw: string | undefined): string {
+  if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  return "/dashboard";
+}
+
 export async function startEditSession(
   _prevState: string | undefined,
   formData: FormData,
@@ -23,6 +29,9 @@ export async function startEditSession(
 
   const key = String(formData.get("key") ?? "");
   const force = formData.get("force") === "on";
+  // 특정 Work Order 화면에서 "바로 이 업무 편집하러 가기"로 시작한 경우, 성공하면
+  // /select-division/dashboard가 아니라 그 화면으로 바로 돌려보낸다.
+  const returnTo = safeReturnPath(formData.get("returnTo") as string | null ?? undefined);
   if (!key) return "편집할 과를 선택하세요.";
 
   // 이 프로세스(=이 PC의 프로그램)에 이미 다른 사람의 편집 세션이 열려 있으면
@@ -63,7 +72,7 @@ export async function startEditSession(
   }
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect(returnTo);
 }
 
 export async function endEditSession(formData: FormData) {
