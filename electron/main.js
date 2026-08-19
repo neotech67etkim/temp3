@@ -13,7 +13,7 @@
 // 대신 "드라이브 문자를 뗀 상대 경로"만 기억해두고, 실행할 때마다 그 상대
 // 경로를 가진 드라이브를 자동으로 찾는다(electron/resolve-nas-path.js).
 
-const { app, BrowserWindow, dialog } = require("electron");
+const { app, BrowserWindow, dialog, Menu } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const http = require("node:http");
@@ -231,12 +231,17 @@ function createWindow() {
     width: 1280,
     height: 860,
     title: "Work Order 관리",
+    autoHideMenuBar: true,
     webPreferences: { contextIsolation: true },
   });
   mainWindow.loadURL(`http://localhost:${PORT}/login`);
 }
 
 app.whenReady().then(async () => {
+  // File/Edit/View/Window 메뉴바 자체를 없앤다(Alt 키로도 안 뜸). 이 앱은
+  // Next.js 화면이 UI 전부를 담당하고, 네이티브 메뉴는 쓸 일이 없다.
+  Menu.setApplicationMenu(null);
+
   let nasRoot;
   try {
     nasRoot = await resolveOrPromptNasRoot();

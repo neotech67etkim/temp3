@@ -27,7 +27,7 @@ export default function LoginPage() {
               type="email"
               required
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              placeholder="admin@company.com"
+              placeholder="xxx@hd.com"
             />
           </div>
           <div>
@@ -57,7 +57,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-6 text-xs text-slate-400">
-          시드 계정 예시: admin@company.com / password123
+          최초로그인: 회사이메일 주소 / password123
         </p>
       </div>
     </div>

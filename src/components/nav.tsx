@@ -11,7 +11,10 @@ export async function Nav() {
 
   const links = [
     { href: "/dashboard", label: "대시보드" },
-    { href: "/projects", label: "프로젝트" },
+    // 프로젝트 탭은 관리자만 필요하고, 나머지는 몰라도 되는 화면이라 감춘다.
+    ...(canManageOrg(session.user.role)
+      ? [{ href: "/projects", label: "프로젝트" }]
+      : []),
     { href: "/work-orders", label: "Work Order" },
     { href: "/gantt", label: "간트차트" },
     ...(canManageOrg(session.user.role)
