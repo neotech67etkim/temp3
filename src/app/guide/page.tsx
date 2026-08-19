@@ -2,10 +2,11 @@ import { BackToDashboard } from "@/components/back-to-dashboard";
 
 const TOC = [
   { href: "#login", label: "1. 최초 로그인 및 비밀번호 변경" },
-  { href: "#workflow", label: "2. Work Order 흐름 체계" },
-  { href: "#usage", label: "3. 화면별 이용 방법" },
-  { href: "#roles", label: "4. 역할별 이용 방법" },
-  { href: "#caution", label: "5. 주의사항" },
+  { href: "#edit-mode", label: "2. 편집 모드 (조회 vs 편집)" },
+  { href: "#workflow", label: "3. Work Order 흐름 체계" },
+  { href: "#usage", label: "4. 화면별 이용 방법" },
+  { href: "#roles", label: "5. 역할별 이용 방법" },
+  { href: "#caution", label: "6. 주의사항" },
 ];
 
 function Section({
@@ -103,7 +104,49 @@ export default function GuidePage() {
           </Note>
         </Section>
 
-        <Section id="workflow" title="2. Work Order 흐름 체계">
+        <Section id="edit-mode" title="2. 편집 모드 (조회 vs 편집)">
+          <p>
+            대시보드·업무 목록·상세 화면을 <strong>보는 것</strong>은 언제나
+            누구나 가능합니다. 하지만 업무 추가, 상태·진행률 변경, 담당자
+            지정/이관, 진행관련 정보 및 질문 등록처럼 실제로{" "}
+            <strong>내용을 바꾸는 조작</strong>을 하려면, 먼저 화면 상단(또는
+            그 조작이 있는 위치)의 <strong>&quot;편집 시작&quot;</strong>을
+            눌러 편집 잠금을 확보해야 합니다.
+          </p>
+          <div className="flex flex-col gap-2">
+            <Step n={1}>
+              &quot;편집 시작&quot;을 누르면 <strong>편집할 과</strong>를
+              선택하는 화면으로 이동합니다. 소속 과가 하나뿐이면 바로 그 과의
+              &quot;편집 시작&quot; 버튼을, 여러 과를 관리하는 부서장/과장은{" "}
+              <strong>&quot;전체 편집 시작&quot;</strong>으로 소속 과 전체를
+              한 번에 열 수 있습니다.
+            </Step>
+            <Step n={2}>
+              <strong>한 번에 한 사람만 같은 과를 편집</strong>할 수 있습니다.
+              다른 사람이 이미 편집 중인 과는 &quot;편집불가&quot;로 표시되고,
+              그 사람이 저장하거나 취소해야 다른 사람이 편집할 수 있습니다.
+              전체 편집 시작 시 일부 과만 다른 사람이 쓰고 있다면 그 과만
+              제외되고 나머지는 바로 열립니다.
+            </Step>
+            <Step n={3}>
+              편집을 마치면 화면 상단의 <strong>&quot;저장하고 종료&quot;</strong>
+              (변경 내용 확정)나 <strong>&quot;취소&quot;</strong>(변경 내용
+              버림)를 눌러 잠금을 풀어줍니다. 개별 작업은 그때그때 이미 즉시
+              저장되고 있으므로, &quot;저장하고 종료&quot;를 누르기 전에
+              프로그램이 갑자기 꺼져도 마지막 작업까지는 안전하게 남습니다.
+            </Step>
+          </div>
+          <Note>
+            편집 중 <strong>10분간 아무 조작이 없으면</strong> 자동으로
+            저장되고 편집이 종료됩니다(잠금을 계속 붙잡고 있지 않도록). 만약
+            프로그램이 응답 없이 꺼지는 등으로 잠금이 그대로 남으면, 다른
+            사람은 <strong>10분이 지난 뒤부터</strong> 바로 이어받을 수
+            있습니다. 본인이 걸어둔 잠금이라면(예: 프로그램을 다시 켰을 때)
+            시간과 무관하게 즉시 다시 이어받을 수 있습니다.
+          </Note>
+        </Section>
+
+        <Section id="workflow" title="3. Work Order 흐름 체계">
           <p>
             조직은 <strong>부서 → 과 → 팀</strong> 순서로 구성됩니다. 과에는
             사무직인 <strong>과원</strong>이 소속되고, 그 아래 현장 작업팀은
@@ -147,7 +190,7 @@ export default function GuidePage() {
           </p>
         </Section>
 
-        <Section id="usage" title="3. 화면별 이용 방법">
+        <Section id="usage" title="4. 화면별 이용 방법">
           <p>
             <strong>대시보드</strong> — 로그인 후 첫 화면입니다. 맨 위에{" "}
             <strong>내 업무리스트</strong>(빠른 할일 추가 포함)와{" "}
@@ -204,7 +247,7 @@ export default function GuidePage() {
           </p>
         </Section>
 
-        <Section id="roles" title="4. 역할별 이용 방법">
+        <Section id="roles" title="5. 역할별 이용 방법">
           <div className="flex flex-col gap-4">
             <div>
               <p className="font-medium text-slate-800">부서장</p>
@@ -251,7 +294,7 @@ export default function GuidePage() {
           </div>
         </Section>
 
-        <Section id="caution" title="5. 주의사항">
+        <Section id="caution" title="6. 주의사항">
           <ul className="list-disc pl-5">
             <li>로그인 이메일/비밀번호는 본인만 사용하고 타인과 공유하지 마세요.</li>
             <li>
@@ -272,8 +315,12 @@ export default function GuidePage() {
               않습니다.
             </li>
             <li>
-              첨부한 스크린샷과 모든 업무 데이터는 사내 보안영역 서버에만
+              첨부한 스크린샷과 모든 업무 데이터는 사내 NAS 공유 폴더에만
               저장되며 외부로 나가지 않습니다.
+            </li>
+            <li>
+              같은 과를 동시에 편집할 수 있는 사람은 한 번에 한 명뿐입니다.
+              자세한 내용은 위 &quot;편집 모드&quot; 항목을 참고하세요.
             </li>
           </ul>
         </Section>
