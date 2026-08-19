@@ -27,7 +27,6 @@ export async function startEditSession(
   if (!session?.user) return "로그인이 필요합니다.";
 
   const key = String(formData.get("key") ?? "");
-  const force = formData.get("force") === "on";
   // 특정 Work Order 화면에서 "바로 이 업무 편집하러 가기"로 시작한 경우, 성공하면
   // /select-division/dashboard가 아니라 그 화면으로 바로 돌려보낸다.
   const returnTo = safeReturnPath(formData.get("returnTo") as string | null ?? undefined);
@@ -64,16 +63,12 @@ export async function startEditSession(
   }
 
   const ctx = buildContext();
-  const result = await ctx.openForEdit(
-    key,
-    { name: session.user.name ?? session.user.email ?? "", email: session.user.email ?? "" },
-    { force },
-  );
+  const result = await ctx.openForEdit(key, {
+    name: session.user.name ?? session.user.email ?? "",
+    email: session.user.email ?? "",
+  });
 
   if (!result.ok) {
-    if (result.reason === "stale") {
-      return `"${key}"는 ${result.lock.holderName}님이 오래 전(응답 없음)에 편집을 시작한 상태로 남아있습니다. 강제로 이어받으려면 아래 체크박스를 선택하고 다시 시도하세요.`;
-    }
     return `지금 "${key}"는 ${result.lock.holderName}님이 편집 중입니다. 잠시 후 다시 시도하거나, 보기 전용으로 화면을 확인하세요.`;
   }
 

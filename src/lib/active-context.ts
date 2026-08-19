@@ -20,11 +20,11 @@ export {
 
 export type OpenForEditResult =
   | { ok: true }
-  | { ok: false; reason: "locked" | "stale"; lock: LockInfo };
+  | { ok: false; reason: "locked"; lock: LockInfo };
 
 export type OpenManyForEditResult = {
   ok: string[];
-  failed: Array<{ key: string; reason: "locked" | "stale"; lock: LockInfo }>;
+  failed: Array<{ key: string; reason: "locked"; lock: LockInfo }>;
 };
 
 export class ActiveContext {
@@ -37,9 +37,8 @@ export class ActiveContext {
   async openForEdit(
     key: string,
     holder: { name: string; email: string },
-    opts: { force?: boolean } = {},
   ): Promise<OpenForEditResult> {
-    const { result, localPath } = this.store.checkoutForEdit(key, holder, opts);
+    const { result, localPath } = this.store.checkoutForEdit(key, holder);
     if (!result.ok) {
       return { ok: false, reason: result.reason, lock: result.lock } as OpenForEditResult;
     }

@@ -19,12 +19,16 @@ export type LockInfo = {
   holderEmail: string;
   pid: number;
   acquiredAt: string;
+  /** 마지막으로 실제 저장(syncToRemote)이 있었던 시각. 계속 작업 중인 사람은
+   *  이 값이 계속 갱신되므로 아무리 오래 붙잡고 있어도 "응답 없음"으로 잡히지
+   *  않는다 - staleness는 언제 잠갔는지가 아니라 언제 마지막으로 움직였는지로
+   *  판단해야 하기 때문. 옛 잠금 파일(이 필드가 없는)과의 호환을 위해 optional. */
+  lastActiveAt?: string;
 };
 
 export type AcquireResult =
   | { ok: true }
-  | { ok: false; reason: "locked"; lock: LockInfo }
-  | { ok: false; reason: "stale"; lock: LockInfo };
+  | { ok: false; reason: "locked"; lock: LockInfo };
 
 export type NasStoreConfig = {
   /** NAS 공유 폴더(원본 저장 위치). UNC 경로 또는 마운트된 드라이브 경로. */
@@ -51,7 +55,10 @@ export type RemoteVersion = {
   size: number;
 };
 
-const DEFAULT_STALE_TIMEOUT_MS = 60 * 60 * 1000;
+// idle-auto-end-session.tsx의 클라이언트 쪽 10분 무입력 자동 종료와 맞춘 값.
+// 활발히 저장 중인 사람은 lastActiveAt이 계속 갱신되어 절대 여기 안 걸리고,
+// 진짜로 응답 없는(창이 꺼졌거나 프로세스가 죽은) 잠금만 10분 뒤 자동 해제된다.
+const DEFAULT_STALE_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_MAX_BACKUPS_PER_KEY = 200;
 
 function ensureDir(dir: string) {
@@ -150,7 +157,8 @@ export class NasStore {
   }
 
   private isStale(lock: LockInfo): boolean {
-    const age = Date.now() - new Date(lock.acquiredAt).getTime();
+    const referenceTime = lock.lastActiveAt ?? lock.acquiredAt;
+    const age = Date.now() - new Date(referenceTime).getTime();
     return age > this.staleTimeoutMs;
   }
 
@@ -168,21 +176,24 @@ export class NasStore {
   /**
    * 편집 잠금을 원자적으로 획득한다.
    * - 잠금 파일이 없으면 즉시 생성하고 성공.
-   * - 이미 잠겨 있고 오래되지 않았으면 실패(reason: "locked").
-   * - 이미 잠겨 있지만 오래되었으면 실패하되 reason: "stale"로 알려줘서,
-   *   호출자가 사용자에게 "강제 해제하시겠습니까?"를 물어본 뒤 force:true로 재시도할 수 있게 한다.
+   * - 이미 잠겨 있는데 그게 "나(같은 이메일)" 자신이 예전에 건 잠금이면(예:
+   *   프로그램이 재시작되어 메모리 상태는 사라졌지만 잠금 파일은 그대로 남은
+   *   경우) 곧바로 이어받는다 - 자기 자신에게 접근을 거부할 이유가 없다.
+   * - 남의 잠금인데 응답 없음(stale) 상태면 자동으로 해제하고 이어받는다.
+   * - 남의 잠금이고 아직 살아있으면(stale 아님) 실패(reason: "locked").
    */
   acquireLock(
     key: string,
     holder: { name: string; email: string },
-    opts: { force?: boolean } = {},
   ): AcquireResult {
     const lockPath = this.remoteLockPath(key);
+    const now = new Date().toISOString();
     const lock: LockInfo = {
       holderName: holder.name,
       holderEmail: holder.email,
       pid: process.pid,
-      acquiredAt: new Date().toISOString(),
+      acquiredAt: now,
+      lastActiveAt: now,
     };
 
     try {
@@ -194,16 +205,15 @@ export class NasStore {
       const existing = this.readLock(key);
       if (!existing) {
         // 방금 사이에 해제됐을 수 있음 - 한 번 더 시도
-        return this.acquireLock(key, holder, opts);
+        return this.acquireLock(key, holder);
       }
 
-      const stale = this.isStale(existing);
-      if (stale && opts.force) {
+      if (existing.holderEmail === holder.email || this.isStale(existing)) {
         fs.rmSync(lockPath, { force: true });
-        return this.acquireLock(key, holder, { force: false });
+        return this.acquireLock(key, holder);
       }
 
-      return { ok: false, reason: stale ? "stale" : "locked", lock: existing };
+      return { ok: false, reason: "locked", lock: existing };
     }
   }
 
@@ -219,9 +229,9 @@ export class NasStore {
   checkoutForEdit(
     key: string,
     holder: { name: string; email: string },
-    opts: { force?: boolean; templateDbPath?: string } = {},
+    opts: { templateDbPath?: string } = {},
   ): { result: AcquireResult; localPath?: string } {
-    const result = this.acquireLock(key, holder, opts);
+    const result = this.acquireLock(key, holder);
     if (!result.ok) return { result };
 
     const remotePath = this.remoteDbPath(key);
@@ -306,10 +316,18 @@ export class NasStore {
     if (!fs.existsSync(localPath)) {
       throw new Error(`로컬 작업 파일이 없습니다: ${localPath}`);
     }
-    if (!this.readLock(key)) {
+    const lock = this.readLock(key);
+    if (!lock) {
       throw new Error(`편집 잠금 없이는 저장할 수 없습니다: ${key}`);
     }
     this.copyLocalToRemote(key);
+    // 실제로 저장이 일어났다는 건 지금 이 사람이 응답 없는 상태가 아니라는
+    // 뜻이므로, staleness 판단 기준 시각을 지금으로 갱신한다(계속 작업 중인
+    // 사람의 잠금이 10분 뒤 남에게 자동으로 넘어가버리는 걸 막기 위함).
+    fs.writeFileSync(
+      this.remoteLockPath(key),
+      JSON.stringify({ ...lock, lastActiveAt: new Date().toISOString() }),
+    );
   }
 
   /** 편집을 취소한다: 로컬 변경을 버리고 잠금만 해제한다. */

@@ -92,8 +92,14 @@ export default async function SelectDivisionPage() {
               const lock = lockStatuses[o.key];
               const stale = lock ? store.isLockStale(lock) : false;
               const heldByMe = isMine && !!current?.keys.includes(o.key);
+              // 잠금 파일상 나 자신의 잠금인데(예: 프로그램이 재시작되어 메모리
+              // 상태만 사라진 경우) 지금 이 프로세스가 들고 있지 않은 상태.
+              // 내 것이므로 기다릴 필요 없이 바로 이어받을 수 있어야 한다.
+              const isMyOtherLock = !!lock && lock.holderEmail === session.user.email && !heldByMe;
               const unavailable =
-                !heldByMe && (processBlockedByOther || (!!lock && !stale));
+                !heldByMe &&
+                !isMyOtherLock &&
+                (processBlockedByOther || (!!lock && !stale));
               return (
                 <div
                   key={o.key}
@@ -109,10 +115,16 @@ export default async function SelectDivisionPage() {
                       )}
                     </p>
                     {lock ? (
-                      <p className="mt-0.5 text-xs text-red-500">
-                        {lock.holderName}님이 {stale ? "오래 전 편집 시작(응답 없음)" : "편집 중"} (
-                        {new Date(lock.acquiredAt).toLocaleString("ko-KR")}부터)
-                      </p>
+                      isMyOtherLock ? (
+                        <p className="mt-0.5 text-xs text-blue-500">
+                          내가 이전에 편집을 시작해둔 상태입니다. 바로 이어서 편집할 수 있습니다.
+                        </p>
+                      ) : (
+                        <p className="mt-0.5 text-xs text-red-500">
+                          {lock.holderName}님이 {stale ? "오래 전 편집 시작(응답 없음)" : "편집 중"} (
+                          {new Date(lock.acquiredAt).toLocaleString("ko-KR")}부터)
+                        </p>
+                      )
                     ) : (
                       <p className="mt-0.5 text-xs text-slate-400">현재 편집 중인 사람 없음</p>
                     )}
@@ -135,6 +147,7 @@ export default async function SelectDivisionPage() {
                     <EditSessionForm
                       divisionKey={o.key}
                       locked={!!lock}
+                      isMyLock={isMyOtherLock}
                       unavailable={unavailable}
                     />
                   )}
