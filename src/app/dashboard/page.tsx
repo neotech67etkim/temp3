@@ -268,9 +268,12 @@ export default async function DashboardPage() {
             {myDeptTree.map((dept) => (
               <div key={dept.id}>
                 <div className="flex items-center gap-4">
-                  <span className="w-40 shrink-0 text-sm font-medium text-slate-800">
+                  <Link
+                    href={`/work-orders?dept=${encodeURIComponent(dept.name)}`}
+                    className="w-40 shrink-0 text-sm font-medium text-slate-800 hover:text-blue-600 hover:underline"
+                  >
                     {dept.name}
-                  </span>
+                  </Link>
                   <span className="w-20 shrink-0 text-xs text-slate-400">
                     {dept.workOrderCount}건
                   </span>
@@ -282,9 +285,12 @@ export default async function DashboardPage() {
                   <ul className="mt-2 ml-6 flex flex-col gap-2 border-l border-slate-100 pl-4">
                     {dept.children.map((div) => (
                       <li key={div.id} className="flex items-center gap-4">
-                        <span className="w-36 shrink-0 text-sm text-slate-600">
+                        <Link
+                          href={`/work-orders?dept=${encodeURIComponent(dept.name)}&div=${encodeURIComponent(div.name)}`}
+                          className="w-36 shrink-0 text-sm text-slate-600 hover:text-blue-600 hover:underline"
+                        >
                           {div.name}
-                        </span>
+                        </Link>
                         <span className="w-20 shrink-0 text-xs text-slate-400">
                           {div.workOrderCount}건
                         </span>

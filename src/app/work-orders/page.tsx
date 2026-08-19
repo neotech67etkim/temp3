@@ -16,7 +16,12 @@ import { BackToDashboard } from "@/components/back-to-dashboard";
 const UNASSIGNED_GROUP = "미지정";
 const DEPT_WIDE_GROUP = "부서 공통";
 
-export default async function WorkOrdersPage() {
+export default async function WorkOrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ dept?: string; div?: string }>;
+}) {
+  const { dept: deptFilter, div: divFilter } = await searchParams;
   const session = await auth();
   if (!session?.user) return null;
 
@@ -100,6 +105,11 @@ export default async function WorkOrdersPage() {
     deptGroup.get(div)!.push(wo);
   }
   const sortedDepts = [...groups.keys()].sort((a, b) => a.localeCompare(b));
+  // 대시보드의 "과별 진행현황"에서 부서/과를 클릭하면 여기로 넘어온다 -
+  // 부서만 지정하면 그 부서의 모든 과, 과까지 지정하면 그 과만 남긴다.
+  const visibleDepts = deptFilter
+    ? sortedDepts.filter((d) => d === deptFilter)
+    : sortedDepts;
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
@@ -112,6 +122,14 @@ export default async function WorkOrdersPage() {
           <p className="mt-1 text-sm text-slate-500">
             내 권한 범위에 해당하는 업무지시를 과 단위로 묶어서 보여줍니다.
           </p>
+          {(deptFilter || divFilter) && (
+            <p className="mt-2 text-xs text-slate-500">
+              필터: <strong>{divFilter ?? deptFilter}</strong>{" "}
+              <Link href="/work-orders" className="text-blue-600 hover:underline">
+                전체 보기
+              </Link>
+            </p>
+          )}
         </div>
         {canManage && (
           <Link
@@ -123,17 +141,18 @@ export default async function WorkOrdersPage() {
         )}
       </div>
 
-      {workOrders.length === 0 ? (
+      {workOrders.length === 0 || visibleDepts.length === 0 ? (
         <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
           <p className="text-sm text-slate-400">해당하는 업무가 없습니다.</p>
         </div>
       ) : (
         <div className="mt-6 flex flex-col gap-6">
-          {sortedDepts.map((dept) => {
+          {visibleDepts.map((dept) => {
             const deptGroup = groups.get(dept)!;
-            const sortedDivs = [...deptGroup.keys()].sort((a, b) =>
-              a.localeCompare(b),
-            );
+            const sortedDivs = (divFilter
+              ? [...deptGroup.keys()].filter((d) => d === divFilter)
+              : [...deptGroup.keys()]
+            ).sort((a, b) => a.localeCompare(b));
             return (
               <div key={dept}>
                 <h2 className="mb-2 text-sm font-semibold text-slate-800">
