@@ -1,3 +1,5 @@
+import { LogImageThumbnail } from "@/components/log-image-thumbnail";
+
 type LogItem = {
   id: string;
   note: string | null;
@@ -31,21 +33,7 @@ export function WorkOrderLogList({ logs }: { logs: LogItem[] }) {
               {log.note}
             </p>
           )}
-          {log.imagePath && (
-            <a
-              href={log.imagePath}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 block"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={log.imagePath}
-                alt="첨부 스크린샷"
-                className="max-h-64 rounded-md border border-slate-200"
-              />
-            </a>
-          )}
+          {log.imagePath && <LogImageThumbnail src={log.imagePath} />}
           {log.filePath && (
             <p className="mt-2 rounded bg-slate-50 px-2 py-1 font-mono text-xs text-slate-500">
               {log.filePath}

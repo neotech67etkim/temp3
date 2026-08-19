@@ -3,66 +3,6 @@ import { computeProgress } from "@/lib/progress";
 import type { NasStore } from "@/lib/nas-store";
 import { queryAllDivisions } from "@/lib/multi-division-query";
 
-export type CategoryProgress = {
-  id: string;
-  name: string;
-  color: string | null;
-  progress: number;
-  totalWorkOrders: number;
-  projectCount: number;
-  statusCounts: Record<string, number>;
-};
-
-export async function getCategoryProgress(
-  store: NasStore,
-  divisionKeys: string[],
-  migrationsDir: string,
-): Promise<CategoryProgress[]> {
-  const categories = await orgDb.category.findMany({
-    include: { projects: true },
-    orderBy: { createdAt: "asc" },
-  });
-
-  const results = await queryAllDivisions(store, divisionKeys, migrationsDir, (client) =>
-    client.workOrder.findMany({
-      select: { id: true, parentId: true, progress: true, status: true, projectId: true },
-    }),
-  );
-  const allWorkOrders = results.flatMap((r) => r.value);
-  const byProject = new Map<string, typeof allWorkOrders>();
-  for (const wo of allWorkOrders) {
-    if (!byProject.has(wo.projectId)) byProject.set(wo.projectId, []);
-    byProject.get(wo.projectId)!.push(wo);
-  }
-
-  return categories.map((category) => {
-    const allNodes = category.projects.flatMap((p) => byProject.get(p.id) ?? []);
-    const progressMap = computeProgress(allNodes);
-    const roots = allNodes.filter((n) => !n.parentId);
-    const overall = roots.length
-      ? Math.round(
-          roots.reduce((sum, n) => sum + (progressMap.get(n.id) ?? 0), 0) /
-            roots.length,
-        )
-      : 0;
-
-    const statusCounts = allNodes.reduce<Record<string, number>>((acc, n) => {
-      acc[n.status] = (acc[n.status] ?? 0) + 1;
-      return acc;
-    }, {});
-
-    return {
-      id: category.id,
-      name: category.name,
-      color: category.color,
-      progress: overall,
-      totalWorkOrders: allNodes.length,
-      projectCount: category.projects.length,
-      statusCounts,
-    };
-  });
-}
-
 export type OrgProgressNode = {
   id: string;
   name: string;
