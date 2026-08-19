@@ -11,7 +11,8 @@ export default async function AccountPage() {
       <BackToDashboard />
       <h1 className="text-xl font-semibold text-slate-900">내 계정</h1>
       <p className="mt-1 text-sm text-slate-500">
-        로그인 이메일과 비밀번호를 직접 변경할 수 있습니다.
+        비밀번호를 직접 변경할 수 있습니다. 로그인 이메일(아이디)은 정책상
+        변경할 수 없습니다.
       </p>
 
       <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">

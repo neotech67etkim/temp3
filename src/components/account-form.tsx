@@ -13,6 +13,21 @@ export function AccountForm({ currentEmail }: { currentEmail: string }) {
     <form action={formAction} className="flex flex-col gap-4">
       <div>
         <label className="mb-1 block text-sm font-medium text-slate-700">
+          로그인 이메일 (아이디)
+        </label>
+        <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+          {currentEmail}
+        </p>
+        <p className="mt-1 text-xs text-slate-400">
+          정책상 아이디(로그인 이메일)는 변경할 수 없습니다. 변경이
+          필요하면 관리자에게 문의하세요.
+        </p>
+      </div>
+
+      <hr className="border-slate-100" />
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">
           현재 비밀번호 (확인용, 필수)
         </label>
         <input
@@ -21,23 +36,6 @@ export function AccountForm({ currentEmail }: { currentEmail: string }) {
           required
           className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
-      </div>
-
-      <hr className="border-slate-100" />
-
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
-          로그인 이메일 (아이디)
-        </label>
-        <input
-          name="email"
-          type="email"
-          defaultValue={currentEmail}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-        <p className="mt-1 text-xs text-slate-400">
-          변경하지 않으려면 그대로 두세요.
-        </p>
       </div>
 
       <div>

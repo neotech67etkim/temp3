@@ -12,7 +12,6 @@ export async function updateOwnAccount(
   if (!session?.user) return "로그인이 필요합니다.";
 
   const currentPassword = String(formData.get("currentPassword") ?? "");
-  const newEmail = String(formData.get("email") ?? "").trim();
   const newPassword = String(formData.get("newPassword") ?? "");
   const newPasswordConfirm = String(formData.get("newPasswordConfirm") ?? "");
 
@@ -28,25 +27,15 @@ export async function updateOwnAccount(
   const passwordValid = await bcrypt.compare(currentPassword, user.passwordHash);
   if (!passwordValid) return "현재 비밀번호가 올바르지 않습니다.";
 
-  const data: { email?: string; passwordHash?: string } = {};
+  // 정책상 로그인 이메일(아이디)은 본인도 변경할 수 없다 - 비밀번호만 바꿀 수 있다.
+  if (!newPassword && !newPasswordConfirm) return "변경할 내용이 없습니다.";
+  if (newPassword.length < 8) return "새 비밀번호는 8자 이상이어야 합니다.";
+  if (newPassword !== newPasswordConfirm) return "새 비밀번호가 일치하지 않습니다.";
 
-  if (newEmail && newEmail !== user.email) {
-    const exists = await orgDb.user.findUnique({ where: { email: newEmail } });
-    if (exists) return "이미 사용 중인 이메일입니다.";
-    data.email = newEmail;
-  }
+  await orgDb.user.update({
+    where: { id: user.id },
+    data: { passwordHash: await bcrypt.hash(newPassword, 10) },
+  });
 
-  if (newPassword || newPasswordConfirm) {
-    if (newPassword.length < 8) return "새 비밀번호는 8자 이상이어야 합니다.";
-    if (newPassword !== newPasswordConfirm) return "새 비밀번호가 일치하지 않습니다.";
-    data.passwordHash = await bcrypt.hash(newPassword, 10);
-  }
-
-  if (Object.keys(data).length === 0) return "변경할 내용이 없습니다.";
-
-  await orgDb.user.update({ where: { id: user.id }, data });
-
-  return data.email
-    ? "저장되었습니다. 이메일을 변경하셨으니 다음 로그인부터 새 이메일을 사용하세요."
-    : "저장되었습니다.";
+  return "저장되었습니다.";
 }
