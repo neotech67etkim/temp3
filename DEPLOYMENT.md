@@ -74,7 +74,29 @@ npm run dist:win      # dist/ 아래 Windows 설치 파일(.exe) 생성
 파일이 실행되어 업데이트됩니다(다시 설치 파일을 찾아 실행할 필요 없음).
 데이터는 NAS에 있으므로 프로그램을 새로 설치해도 그대로 보존됩니다.
 
-### 새 버전 배포 절차 (개발/빌드 PC, Windows)
+### 새 버전 배포 절차 (개발/빌드 PC, Windows) — `deploy.bat` 한 번으로
+
+저장소 루트의 `deploy.bat`가 아래 과정을 전부 한 번에 처리합니다:
+git pull → `npm ci` → 버전(patch) 자동으로 올리고 커밋/푸시 → `npm run
+dist:win` 빌드 → 이 PC에 이미 설치된 WorkOrder 앱이 쓰고 있는 NAS 경로를
+자동으로 찾아서(`scripts/resolve-nas-root.js`, 드라이브 문자가 바뀌어도
+동작) 그 밑 `releases/` 폴더로 배포.
+
+```powershell
+deploy.bat "이번에 바뀐 내용 한 줄 설명"
+```
+
+인자(릴리스 노트)는 생략 가능합니다. 실행 중 어느 단계에서든 실패하면
+그 자리에서 멈추고 오류를 보여줍니다.
+
+이 스크립트는 **이 PC에 WorkOrder 프로그램이 이미 한 번 설치되어 실행된
+적이 있어야** 동작합니다(NAS 경로를 그 프로그램의 설정 파일에서 읽어오기
+때문). 아직 설치된 적 없는 새 PC에서 최초로 빌드/배포하려면 아래처럼
+직접 하거나, 다른 PC에서 `deploy.bat`로 배포한 뒤 최초 설치는 아래 "최초
+배포 절차"를 따르세요.
+
+<details>
+<summary>수동으로 단계별 실행하기</summary>
 
 ```bash
 git pull origin <배포 브랜치>
@@ -88,12 +110,15 @@ npm ci
    npm run dist:win
    ```
 3. NAS의 `releases/` 폴더로 배포합니다(설치 파일 복사 + `latest.json` 갱신을
-   한 번에 처리합니다).
+   한 번에 처리합니다). `<NAS 경로>`는 실제 NAS 공유 폴더 경로(1번에서
+   만든 그 폴더)입니다.
    ```bash
-   npm run publish:win -- "\\사내서버\해양시스템공사부\WorkOrderApp\releases" "이번 버전에서 바뀐 점"
+   npm run publish:win -- "<NAS 경로>\releases" "이번 버전에서 바뀐 점"
    ```
    (마지막 인자인 릴리스 노트는 생략 가능하며, 생략하면 업데이트 안내
    창에 별도 설명 없이 버전 번호만 표시됩니다.)
+
+</details>
 
 이걸로 끝입니다. 각 PC는 다음 실행 시 자동으로 새 버전을 인식합니다.
 아직 프로그램이 한 번도 설치되지 않은 새 PC는 여전히 아래 "최초 배포
