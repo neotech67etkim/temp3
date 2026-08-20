@@ -22,6 +22,13 @@ const { spawn } = require("node:child_process");
 const { resolveNasRoot, stripDriveLetter } = require("./resolve-nas-path");
 const { findAvailableUpdate, launchInstallerAndQuit } = require("./update-check");
 
+// 이 앱은 해양시스템공사부 전용이라 NAS 위치가 사실상 고정이다. 최초
+// 실행 때마다 사람이 경로를 직접 타이핑하게 하는 대신, 이 기본 경로를
+// 먼저 자동으로 찾아본다(드라이브 문자 A~Z를 훑는 기존 로직 그대로 재사용).
+// 찾으면 물어보지 않고 바로 시작하고, 못 찾을 때만(다른 부서에 배포하거나
+// NAS 구조가 바뀐 경우) 예전처럼 직접 입력받는 창을 띄운다.
+const DEFAULT_NAS_RELATIVE_PATH = "10. 외업도장과\\AI 프로젝트\\dev";
+
 const PORT = 4200;
 const CONFIG_PATH = path.join(app.getPath("userData"), "config.json");
 const WORKSPACE_ROOT = path.join(app.getPath("userData"), "workspace");
@@ -141,6 +148,20 @@ async function promptForNasPath(previousError) {
  */
 async function resolveOrPromptNasRoot() {
   let config = loadConfig();
+
+  // 최초 실행(설정 파일 자체가 없음)이면, 사람에게 묻기 전에 기본 경로부터
+  // 조용히 찾아본다. 찾아지면 사람이 아무것도 입력할 필요가 없다.
+  if (!config) {
+    const found = resolveNasRoot(DEFAULT_NAS_RELATIVE_PATH, undefined);
+    if (found) {
+      config = {
+        relativePath: DEFAULT_NAS_RELATIVE_PATH,
+        lastKnownDrive: found.drive,
+      };
+      saveConfig(config);
+      return found.fullPath;
+    }
+  }
 
   while (true) {
     if (!config?.relativePath) {
