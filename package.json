@@ -35,6 +35,8 @@
           "package.json",
           ".next/**/*",
           "node_modules/**/*",
+          "node_modules/.prisma/**/*",
+          "node_modules/.bin/**/*",
           "public/**/*",
           "prisma/**/*",
           "next.config.ts"
