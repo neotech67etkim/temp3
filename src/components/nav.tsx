@@ -7,6 +7,7 @@ import { endEditSession } from "@/actions/context";
 import { IdleAutoEndSession } from "@/components/idle-auto-end-session";
 import { EditSessionPoller } from "@/components/edit-session-poller";
 import type { WaiterInfo } from "@/lib/nas-store";
+import packageJson from "../../package.json";
 
 export async function Nav() {
   const session = await auth();
@@ -54,7 +55,10 @@ export async function Nav() {
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
         <div className="flex items-center gap-8">
           <span className="text-sm font-semibold text-slate-900">
-            Work Order 관리
+            Work Order 관리{" "}
+            <span className="font-normal text-slate-400">
+              v{packageJson.version}
+            </span>
           </span>
           <nav className="flex gap-5">
             {links.map((link) => (

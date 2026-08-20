@@ -255,7 +255,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
-    title: "Work Order 관리",
+    title: `Work Order 관리 v${app.getVersion()}`,
     autoHideMenuBar: true,
     webPreferences: { contextIsolation: true },
   });
