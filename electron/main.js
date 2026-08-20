@@ -202,6 +202,17 @@ function waitForServer(port, timeoutMs = 30000) {
   });
 }
 
+const LOG_PATH = path.join(app.getPath("userData"), "logs", "next-server.log");
+
+function appendLog(line) {
+  try {
+    fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true });
+    fs.appendFileSync(LOG_PATH, `[${new Date().toISOString()}] ${line}\n`);
+  } catch {
+    // 로그 남기기 자체가 실패해도 앱 동작에는 영향 주지 않는다.
+  }
+}
+
 function startNextServer(env) {
   // node_modules/.bin/next는 npm이 만드는 셸 셔림(shim)이라 OS/npm 버전에
   // 따라 확장자 없는 파일이 아예 없을 수 있다(Windows는 .cmd/.ps1만 만드는
@@ -210,7 +221,17 @@ function startNextServer(env) {
   const nextCli = path.join(APP_ROOT, "node_modules", "next", "dist", "bin", "next");
   serverProcess = spawn(process.execPath, [nextCli, "start", "-p", String(PORT)], {
     cwd: APP_ROOT,
-    env: { ...process.env, ...env },
+    env: {
+      ...process.env,
+      ...env,
+      // 패키징된 앱에서 process.execPath는 별도로 설치된 Node가 아니라
+      // 이 Electron 실행 파일 자체를 가리킨다. 이 플래그 없이 그대로
+      // spawn하면 Electron이 nextCli 인자를 "실행할 앱"으로 오인해서
+      // 새 Electron 인스턴스를 띄우려 시도하고, 정작 Next 서버는 절대
+      // 뜨지 않아 waitForServer가 매번 타임아웃난다("서버 시작 대기 시간
+      // 초과" 증상과 정확히 일치) - 반드시 필요.
+      ELECTRON_RUN_AS_NODE: "1",
+    },
     stdio: "pipe",
   });
   // 중요: child_process의 "error" 이벤트를 처리하는 리스너가 하나도 없으면,
@@ -218,12 +239,15 @@ function startNextServer(env) {
   // 그 자리에서 죽여버린다(창도, 에러 대화상자도 없이 그냥 꺼짐) - 실제로
   // 겪은 증상과 일치. 반드시 리스너를 달아서 이 크래시를 막아야 한다.
   serverProcess.on("error", (err) => {
-    console.error(`[next] 서버 프로세스를 시작하지 못함: ${err.message}`);
+    appendLog(`서버 프로세스를 시작하지 못함: ${err.message}`);
   });
-  serverProcess.stdout.on("data", (d) => console.log(`[next] ${d}`));
-  serverProcess.stderr.on("data", (d) => console.error(`[next] ${d}`));
+  // 패키징된 앱은 콘솔 창이 없어서 console.log/error가 어디에도 보이지
+  // 않는다 - 문제가 생겼을 때 재현/디버깅이 불가능해지므로, 별도 코드
+  // 수정 없이도 확인할 수 있도록 파일로 남긴다(%APPDATA%/<앱>/logs/next-server.log).
+  serverProcess.stdout.on("data", (d) => appendLog(`[next stdout] ${d}`.trimEnd()));
+  serverProcess.stderr.on("data", (d) => appendLog(`[next stderr] ${d}`.trimEnd()));
   serverProcess.on("exit", (code, signal) => {
-    console.log(`Next 서버가 종료됨 (code ${code}, signal ${signal})`);
+    appendLog(`Next 서버가 종료됨 (code ${code}, signal ${signal})`);
   });
 }
 
@@ -298,7 +322,7 @@ app.whenReady().then(async () => {
   } catch (err) {
     dialog.showErrorBox(
       "시작 실패",
-      `서버를 시작하지 못했습니다.\n\n${err.message}\n\nNAS 경로(${nasRoot})에 접근 가능한지 확인해주세요.`,
+      `서버를 시작하지 못했습니다.\n\n${err.message}\n\nNAS 경로(${nasRoot})에 접근 가능한지 확인해주세요.\n\n자세한 원인은 로그 파일을 확인하세요:\n${LOG_PATH}`,
     );
     app.quit();
   }
