@@ -24,6 +24,16 @@ export type LockInfo = {
    *  않는다 - staleness는 언제 잠갔는지가 아니라 언제 마지막으로 움직였는지로
    *  판단해야 하기 때문. 옛 잠금 파일(이 필드가 없는)과의 호환을 위해 optional. */
   lastActiveAt?: string;
+  /** 이 과를 편집하려다 막힌 사람들. 지금 편집 중인 사람에게 "누가 기다리고
+   *  있다"고 알려주기 위한 용도 - 편집을 끝내면(잠금이 새로 생기면) 자동으로
+   *  비워진다. */
+  waiters?: WaiterInfo[];
+};
+
+export type WaiterInfo = {
+  name: string;
+  email: string;
+  requestedAt: string;
 };
 
 export type AcquireResult =
@@ -171,6 +181,21 @@ export class NasStore {
    *  "강제로 이어받기"를 구분해 보여줄 때 씀). */
   isLockStale(lock: LockInfo): boolean {
     return this.isStale(lock);
+  }
+
+  /**
+   * 편집을 시도했다가 막힌 사람을 그 과 잠금에 "대기 중"으로 등록한다. 지금
+   * 편집 중인 사람이 화면에서 "OOO님이 기다리고 있습니다"를 볼 수 있게
+   * 하기 위함 - 그냥 말없이 기다리는 대신, 시도한 시점에 자동으로 알려준다.
+   * 같은 사람이 여러 번 시도하면 대기 시각만 최신으로 갱신한다. 그 사이
+   * 잠금이 풀렸으면(경합) 등록할 대상이 없으므로 조용히 넘어간다.
+   */
+  registerWaiter(key: string, waiter: { name: string; email: string }): void {
+    const lock = this.readLock(key);
+    if (!lock) return;
+    const waiters = (lock.waiters ?? []).filter((w) => w.email !== waiter.email);
+    waiters.push({ ...waiter, requestedAt: new Date().toISOString() });
+    fs.writeFileSync(this.remoteLockPath(key), JSON.stringify({ ...lock, waiters }));
   }
 
   /**

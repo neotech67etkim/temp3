@@ -69,7 +69,13 @@ export async function startEditSession(
   });
 
   if (!result.ok) {
-    return `지금 "${key}"는 ${result.lock.holderName}님이 편집 중입니다. 잠시 후 다시 시도하거나, 보기 전용으로 화면을 확인하세요.`;
+    // 그냥 실패로 끝내지 않고, 지금 편집 중인 사람이 화면에서 "OOO님이
+    // 기다리고 있습니다"를 볼 수 있게 대기자로 등록해둔다.
+    getNasStore().registerWaiter(key, {
+      name: session.user.name ?? session.user.email ?? "",
+      email: session.user.email ?? "",
+    });
+    return `지금 "${key}"는 ${result.lock.holderName}님이 편집 중입니다. 기다리고 있다고 알렸습니다 - 잠시 후 다시 시도하거나, 보기 전용으로 화면을 확인하세요.`;
   }
 
   revalidatePath("/", "layout");
@@ -113,6 +119,11 @@ export async function startEditSessionAll(
   };
   const ctx = buildContext();
   const { failed } = await ctx.openManyForEdit(toOpen, holder);
+
+  const store = getNasStore();
+  for (const f of failed) {
+    store.registerWaiter(f.key, holder);
+  }
 
   setUnavailableDivisions(
     failed.map((f) => ({ key: f.key, holderName: f.lock.holderName })),

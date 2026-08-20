@@ -2,8 +2,11 @@ import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import { ROLE_LABEL, canManageOrg } from "@/lib/org-access";
 import { getActiveContextInfo, getUnavailableDivisions } from "@/lib/db";
+import { getNasStore } from "@/lib/app-config";
 import { endEditSession } from "@/actions/context";
 import { IdleAutoEndSession } from "@/components/idle-auto-end-session";
+import { EditSessionPoller } from "@/components/edit-session-poller";
+import type { WaiterInfo } from "@/lib/nas-store";
 
 export async function Nav() {
   const session = await auth();
@@ -33,6 +36,19 @@ export async function Nav() {
       : null;
   const unavailable = isMyEditSession ? getUnavailableDivisions() : [];
 
+  // 내가 편집 중인 과들에 누가 기다리고 있으면 알려준다 - 편집 시작을
+  // 시도했다가 막힌 사람은 자동으로 대기자로 등록되므로(actions/context.ts),
+  // 여기서 조회만 하면 된다.
+  const waiters: WaiterInfo[] = isMyEditSession
+    ? Object.values(
+        Object.fromEntries(
+          context.keys
+            .flatMap((key) => getNasStore().getLockStatus(key)?.waiters ?? [])
+            .map((w) => [w.email, w]),
+        ),
+      )
+    : [];
+
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
@@ -56,6 +72,20 @@ export async function Nav() {
           {isMyEditSession && context ? (
             <>
               <IdleAutoEndSession />
+              <EditSessionPoller />
+              {waiters.length > 0 && (
+                <span
+                  className="animate-pulse rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800"
+                  title={waiters
+                    .map((w) => `${w.name} (${new Date(w.requestedAt).toLocaleTimeString("ko-KR")}부터 대기)`)
+                    .join(", ")}
+                >
+                  ⏳{" "}
+                  {waiters.length === 1
+                    ? `${waiters[0].name}님이 기다리고 있습니다`
+                    : `${waiters.length}명이 기다리고 있습니다`}
+                </span>
+              )}
               <form action={endEditSession} className="flex items-center gap-2">
                 <span
                   className="rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700"
