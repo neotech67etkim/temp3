@@ -20,6 +20,7 @@ const http = require("node:http");
 const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { resolveNasRoot, stripDriveLetter } = require("./resolve-nas-path");
+const { findAvailableUpdate, launchInstallerAndQuit } = require("./update-check");
 
 const PORT = 4200;
 const CONFIG_PATH = path.join(app.getPath("userData"), "config.json");
@@ -237,6 +238,30 @@ function createWindow() {
   mainWindow.loadURL(`http://localhost:${PORT}/login`);
 }
 
+/**
+ * NAS의 releases/latest.json에 지금 버전보다 새 것이 있으면 물어보고,
+ * 동의하면 설치 파일을 실행한 뒤 앱을 종료한다. 창이 뜬 뒤 백그라운드로
+ * 확인하며, 실패하거나 새 버전이 없으면 조용히 넘어간다(사용을 막지 않음).
+ */
+function checkForUpdate(nasRoot) {
+  const update = findAvailableUpdate(nasRoot, app.getVersion());
+  if (!update) return;
+
+  dialog
+    .showMessageBox(mainWindow, {
+      type: "info",
+      buttons: ["지금 업데이트", "나중에"],
+      defaultId: 0,
+      cancelId: 1,
+      title: "새 버전이 있습니다",
+      message: `버전 ${update.version}로 업데이트할 수 있습니다.`,
+      detail: update.notes || "지금 업데이트하면 설치 파일이 실행되고 이 프로그램은 종료됩니다.",
+    })
+    .then(({ response }) => {
+      if (response === 0) launchInstallerAndQuit(app, update.installerPath);
+    });
+}
+
 app.whenReady().then(async () => {
   // File/Edit/View/Window 메뉴바 자체를 없앤다(Alt 키로도 안 뜸). 이 앱은
   // Next.js 화면이 UI 전부를 담당하고, 네이티브 메뉴는 쓸 일이 없다.
@@ -269,6 +294,7 @@ app.whenReady().then(async () => {
     startNextServer(env);
     await waitForServer(PORT);
     createWindow();
+    checkForUpdate(nasRoot);
   } catch (err) {
     dialog.showErrorBox(
       "시작 실패",

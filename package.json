@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "electron:start": "electron .",
-    "dist:win": "npm run build && electron-builder --win"
+    "dist:win": "npm run build && electron-builder --win",
+    "publish:win": "node scripts/publish-release.js"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -43,7 +44,8 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-Setup-${version}.exe"
     }
   },
   "dependencies": {
