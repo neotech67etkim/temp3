@@ -69,10 +69,10 @@ export async function Nav() {
           </nav>
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-500">
+          <EditSessionPoller />
           {isMyEditSession && context ? (
             <>
               <IdleAutoEndSession />
-              <EditSessionPoller />
               {waiters.length > 0 && (
                 <span
                   className="animate-pulse rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800"
