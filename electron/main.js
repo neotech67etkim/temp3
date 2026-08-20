@@ -259,6 +259,19 @@ function createWindow() {
     autoHideMenuBar: true,
     webPreferences: { contextIsolation: true },
   });
+  // 네이티브 메뉴를 완전히 없앴더니(Menu.setApplicationMenu(null)) 메뉴에
+  // 딸려오던 "개발자 도구 열기" 단축키(F12/Ctrl+Shift+I)도 같이 사라졌다.
+  // 화면에서 뭔가 안 눌리는 등 문제가 생겼을 때 원인(브라우저 콘솔 에러)을
+  // 확인할 방법이 없으면 원격으로 디버깅이 사실상 불가능하므로, 단축키를
+  // 직접 다시 연결해둔다.
+  mainWindow.webContents.on("before-input-event", (_event, input) => {
+    const isF12 = input.key === "F12";
+    const isCtrlShiftI =
+      input.control && input.shift && input.key.toLowerCase() === "i";
+    if (isF12 || isCtrlShiftI) {
+      mainWindow.webContents.toggleDevTools();
+    }
+  });
   mainWindow.loadURL(`http://localhost:${PORT}/login`);
 }
 
