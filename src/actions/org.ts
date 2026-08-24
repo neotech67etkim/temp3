@@ -9,6 +9,7 @@ import { canManageOrg } from "@/lib/org-access";
 import { NasStore } from "@/lib/nas-store";
 import { queryAllDivisions } from "@/lib/multi-division-query";
 import { getNasStoreConfig, getMigrationsDir } from "@/lib/app-config";
+import { exportOrgForCopilot } from "@/lib/copilot-export";
 
 async function requireAdmin() {
   const session = await auth();
@@ -18,11 +19,23 @@ async function requireAdmin() {
   return session.user;
 }
 
+/**
+ * 조직도가 바뀔 때마다(부서/과/팀/사용자 추가·삭제) Copilot용 조직도 문서도
+ * 같이 갱신한다. 실패해도 방금 끝난 실제 조직 변경에는 영향이 없어야 하므로
+ * 에러는 콘솔에만 남긴다(work-orders.ts의 syncDivision과 같은 패턴).
+ */
+function syncOrgExport(): void {
+  void exportOrgForCopilot(orgDb, getNasStoreConfig().nasRoot).catch((err) => {
+    console.error("[copilot-export] 조직도 내보내기 실패:", err);
+  });
+}
+
 export async function createDepartment(formData: FormData) {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("부서명을 입력하세요.");
   await orgDb.department.create({ data: { name } });
+  syncOrgExport();
   revalidatePath("/org");
 }
 
@@ -32,6 +45,7 @@ export async function createDivision(formData: FormData) {
   const departmentId = String(formData.get("departmentId") ?? "");
   if (!name || !departmentId) throw new Error("과 이름과 소속 부서를 입력하세요.");
   await orgDb.division.create({ data: { name, departmentId } });
+  syncOrgExport();
   revalidatePath("/org");
 }
 
@@ -41,6 +55,7 @@ export async function createTeam(formData: FormData) {
   const divisionId = String(formData.get("divisionId") ?? "");
   if (!name || !divisionId) throw new Error("팀 이름과 소속 과를 입력하세요.");
   await orgDb.team.create({ data: { name, divisionId } });
+  syncOrgExport();
   revalidatePath("/org");
 }
 
@@ -72,6 +87,7 @@ export async function createUser(formData: FormData) {
       teamId,
     },
   });
+  syncOrgExport();
   revalidatePath("/org");
 }
 
@@ -80,6 +96,7 @@ export async function deleteDepartment(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) throw new Error("잘못된 요청입니다.");
   await orgDb.department.delete({ where: { id } });
+  syncOrgExport();
   revalidatePath("/org");
 }
 
@@ -88,6 +105,7 @@ export async function deleteDivision(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) throw new Error("잘못된 요청입니다.");
   await orgDb.division.delete({ where: { id } });
+  syncOrgExport();
   revalidatePath("/org");
 }
 
@@ -96,6 +114,7 @@ export async function deleteTeam(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) throw new Error("잘못된 요청입니다.");
   await orgDb.team.delete({ where: { id } });
+  syncOrgExport();
   revalidatePath("/org");
 }
 
@@ -124,5 +143,6 @@ export async function deleteUser(formData: FormData) {
   }
 
   await orgDb.user.delete({ where: { id } });
+  syncOrgExport();
   revalidatePath("/org");
 }
