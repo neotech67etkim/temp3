@@ -17,6 +17,7 @@ import type { PrismaClient } from "@prisma/client";
 import { STATUS_LABEL } from "@/components/status-badge";
 import { PRIORITY_LABEL } from "@/components/priority-badge";
 import { formatAssignee } from "@/lib/format";
+import { ROLE_LABEL } from "@/lib/org-access";
 
 function exportDir(nasRoot: string): string {
   return path.join(nasRoot, "copilot-export");
@@ -125,4 +126,82 @@ export async function exportDivisionForCopilot(
   const dir = exportDir(nasRoot);
   fs.mkdirSync(dir, { recursive: true });
   await Promise.all([writeStateDoc(client, key, dir), writeChangeLogDoc(client, key, dir)]);
+}
+
+/**
+ * 조직도(부서 → 과 → 팀 → 개인)를 Markdown 문서(copilot-export/조직도.md)로
+ * 써둔다. org.db는 조직 관리(/org) 화면에서 부서/과/팀/사용자를 추가·삭제할
+ * 때마다 바뀌므로, 그 시점마다 호출해서 갱신한다(actions/org.ts).
+ * 비밀번호 해시 등 민감한 필드는 당연히 포함하지 않는다.
+ */
+export async function exportOrgForCopilot(
+  orgClient: PrismaClient,
+  nasRoot: string,
+): Promise<void> {
+  const [departments, divisions, teams, users] = await Promise.all([
+    orgClient.department.findMany({ orderBy: { name: "asc" } }),
+    orgClient.division.findMany({ orderBy: { name: "asc" } }),
+    orgClient.team.findMany({ orderBy: { name: "asc" } }),
+    orgClient.user.findMany({
+      select: {
+        name: true,
+        email: true,
+        role: true,
+        departmentId: true,
+        divisionId: true,
+        teamId: true,
+      },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+
+  const usersByTeam = new Map<string, typeof users>();
+  const usersByDivisionNoTeam = new Map<string, typeof users>();
+  const usersByDeptOnly = new Map<string, typeof users>();
+  for (const u of users) {
+    if (u.teamId) {
+      usersByTeam.set(u.teamId, [...(usersByTeam.get(u.teamId) ?? []), u]);
+    } else if (u.divisionId) {
+      usersByDivisionNoTeam.set(u.divisionId, [
+        ...(usersByDivisionNoTeam.get(u.divisionId) ?? []),
+        u,
+      ]);
+    } else if (u.departmentId) {
+      usersByDeptOnly.set(u.departmentId, [
+        ...(usersByDeptOnly.get(u.departmentId) ?? []),
+        u,
+      ]);
+    }
+  }
+
+  const lines: string[] = [
+    "# 조직도",
+    "",
+    `기준 시각: ${formatDateTime(new Date())}`,
+    `부서 ${departments.length}개 · 과 ${divisions.length}개 · 팀 ${teams.length}개 · 인원 ${users.length}명`,
+    "",
+  ];
+
+  const formatUser = (u: { name: string; email: string; role: string }) =>
+    `  - ${u.name} (${ROLE_LABEL[u.role as keyof typeof ROLE_LABEL] ?? u.role}, ${u.email})`;
+
+  for (const dept of departments) {
+    lines.push(`## ${dept.name}`);
+    for (const u of usersByDeptOnly.get(dept.id) ?? []) lines.push(formatUser(u));
+
+    for (const div of divisions.filter((d) => d.departmentId === dept.id)) {
+      lines.push(`### ${div.name}`);
+      for (const u of usersByDivisionNoTeam.get(div.id) ?? []) lines.push(formatUser(u));
+
+      for (const team of teams.filter((t) => t.divisionId === div.id)) {
+        lines.push(`#### ${team.name}`);
+        for (const u of usersByTeam.get(team.id) ?? []) lines.push(formatUser(u));
+      }
+    }
+    lines.push("");
+  }
+
+  const dir = exportDir(nasRoot);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "조직도.md"), lines.join("\n"), "utf-8");
 }

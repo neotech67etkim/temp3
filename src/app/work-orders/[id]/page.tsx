@@ -319,19 +319,17 @@ export default async function WorkOrderDetailPage({
         <h2 className="mb-4 text-sm font-semibold text-slate-800">
           진행관련 정보 및 질문
         </h2>
-        {(canManage || isAssignedToMe) && (
-          <div className="mb-6 border-b border-slate-100 pb-6">
-            {isEditing ? (
-              <WorkOrderLogForm workOrderId={workOrder.id} />
-            ) : (
-              <SmartEditStart
-                divisionKey={workOrder.key}
-                returnTo={returnTo}
-                message="진행 관련 정보를 남기려면 먼저 편집을 시작하세요."
-              />
-            )}
-          </div>
-        )}
+        <div className="mb-6 border-b border-slate-100 pb-6">
+          {isEditing ? (
+            <WorkOrderLogForm workOrderId={workOrder.id} />
+          ) : (
+            <SmartEditStart
+              divisionKey={workOrder.key}
+              returnTo={returnTo}
+              message="진행 관련 정보를 남기려면 먼저 편집을 시작하세요."
+            />
+          )}
+        </div>
         <WorkOrderLogList logs={workOrder.logs} />
       </div>
     </div>

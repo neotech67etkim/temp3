@@ -97,6 +97,24 @@ export function openHeldDivision(
   holder: ActiveHolder,
 ): void {
   const held = heldMap();
+
+  // 방어적 안전장치: 이미 다른 사람이 이 프로세스에서 뭔가를 보유 중인데
+  // 그와 다른 holder로 여기 도달하면(원래는 각 액션의 "processBlockedByOther"
+  // 체크가 미리 막아줘야 함), __holder를 조용히 덮어쓰지 않고 크게 실패시킨다.
+  // 조용히 덮어쓰면 held 맵에는 실제로는 서로 다른 사람이 각자 잠근 과들이
+  // 섞여 있는데 __holder 하나로만 전체를 대표하게 되어, 그 이후로 "누가
+  // 편집 중인지"가 화면마다 뒤죽박죽으로 보이는 상태가 되어버린다(실제로
+  // 같은 프로세스에서 계정을 바꿔가며 테스트하다가 이 증상이 보고됨).
+  if (
+    held.size > 0 &&
+    globalForDb.__holder &&
+    globalForDb.__holder.email !== holder.email
+  ) {
+    throw new Error(
+      `이 프로그램은 지금 ${globalForDb.__holder.name}님의 편집 세션을 들고 있어서, ${holder.name}님으로 새로 열 수 없습니다. 먼저 그 세션을 저장/취소로 마쳐야 합니다.`,
+    );
+  }
+
   const existing = held.get(key);
   if (!existing || existing.dbPath !== dbPath) {
     if (existing) void existing.client.$disconnect();
