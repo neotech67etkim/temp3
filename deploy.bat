@@ -13,7 +13,7 @@ if "%NOTES%"=="" set NOTES=버그 수정 및 개선
 echo ================================================
 echo  1/6  git pull (%BRANCH%)
 echo ================================================
-git pull origin %BRANCH%
+git pull --no-edit origin %BRANCH%
 if errorlevel 1 goto :error
 
 echo.
