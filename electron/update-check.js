@@ -53,11 +53,19 @@ function findAvailableUpdate(nasRoot, currentVersion) {
   }
 }
 
-/** 설치 파일을 실행하고(설치 마법사가 이어받도록) 이 앱은 종료한다. */
-function launchInstallerAndQuit(app, installerPath) {
+/**
+ * 설치 파일을 실행하고(설치 마법사가 이어받도록) 이 앱은 종료한다.
+ * spawn 자체는 거의 즉시 반환되지만, 실제 설치 마법사 창이 화면에 뜨기까지는
+ * (특히 NAS 경로에서 실행할 때) 약간의 시간차가 있다. 그 사이에 바로
+ * app.quit()을 불러버리면 이 앱 창은 사라지고 설치 마법사 창은 아직 안 뜬
+ * 상태라 "멈춘 것처럼" 보인다 - onQuitting 콜백으로 그 사이를 채울 안내
+ * 창을 띄우게 하고, 짧게 대기한 뒤 종료한다.
+ */
+function launchInstallerAndQuit(app, installerPath, onQuitting) {
   const child = spawn(installerPath, [], { detached: true, stdio: "ignore" });
   child.unref();
-  app.quit();
+  if (onQuitting) onQuitting();
+  setTimeout(() => app.quit(), 1200);
 }
 
 module.exports = { findAvailableUpdate, launchInstallerAndQuit, compareVersions };

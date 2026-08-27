@@ -297,6 +297,38 @@ function createWindow() {
 }
 
 /**
+ * 설치 마법사가 실제로 뜨기 전까지의 공백 구간을 채우는 작은 안내 창.
+ * 이 창이 없으면 메인 창은 사라지고 설치 마법사는 아직 안 뜬 사이에
+ * Windows가 "(응답없음)"으로 표시해서 멈춘 것처럼 보인다.
+ */
+function showUpdatingOverlay() {
+  const overlay = new BrowserWindow({
+    width: 360,
+    height: 150,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    frame: false,
+    alwaysOnTop: true,
+    center: true,
+    webPreferences: { contextIsolation: true },
+  });
+  overlay.loadURL(
+    "data:text/html;charset=utf-8," +
+      encodeURIComponent(`<!doctype html>
+<html><body style="margin:0;display:flex;flex-direction:column;align-items:center;
+justify-content:center;height:100vh;background:#1e293b;color:#e2e8f0;
+font-family:'Malgun Gothic',sans-serif;">
+  <div style="width:28px;height:28px;border:3px solid #475569;
+  border-top-color:#60a5fa;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+  <p style="margin-top:14px;font-size:13px;">업데이트 설치 파일을 실행하는 중입니다...</p>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+</body></html>`),
+  );
+  return overlay;
+}
+
+/**
  * NAS의 releases/latest.json에 지금 버전보다 새 것이 있으면 물어보고,
  * 동의하면 설치 파일을 실행한 뒤 앱을 종료한다. 창이 뜬 뒤 백그라운드로
  * 확인하며, 실패하거나 새 버전이 없으면 조용히 넘어간다(사용을 막지 않음).
@@ -316,7 +348,8 @@ function checkForUpdate(nasRoot) {
       detail: update.notes || "지금 업데이트하면 설치 파일이 실행되고 이 프로그램은 종료됩니다.",
     })
     .then(({ response }) => {
-      if (response === 0) launchInstallerAndQuit(app, update.installerPath);
+      if (response !== 0) return;
+      launchInstallerAndQuit(app, update.installerPath, showUpdatingOverlay);
     });
 }
 
