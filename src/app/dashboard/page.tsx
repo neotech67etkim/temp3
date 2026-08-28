@@ -46,7 +46,9 @@ export default async function DashboardPage() {
     session?.user
       ? queryAllDivisions(store, divisionKeys, migrationsDir, (client) =>
           client.workOrder.findMany({
-            where: myWorkListWhere(session.user),
+            where: {
+              AND: [myWorkListWhere(session.user), { status: { not: "COMPLETED" } }],
+            },
             include: {
               project: { select: { name: true } },
               createdBy: { select: { name: true } },
@@ -74,7 +76,11 @@ export default async function DashboardPage() {
     ? (
         await queryAllDivisions(store, divisionKeys, migrationsDir, (client) =>
           client.workOrderLog.findMany({
-            where: { workOrder: myWorkListWhere(session.user) },
+            where: {
+              workOrder: {
+                AND: [myWorkListWhere(session.user), { status: { not: "COMPLETED" } }],
+              },
+            },
             include: {
               author: { select: { name: true } },
               workOrder: { select: { id: true, title: true } },
@@ -123,9 +129,17 @@ export default async function DashboardPage() {
 
       {session?.user && (
         <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
-          <h2 className="mb-4 text-sm font-semibold text-slate-800">
-            내 업무리스트
-          </h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-800">
+              내 업무리스트
+            </h2>
+            <Link
+              href="/work-orders/completed"
+              className="text-xs text-blue-600 hover:underline"
+            >
+              완료된 업무 보기
+            </Link>
+          </div>
 
           {isEditing ? (
             <MyTodoForm projects={projects} />

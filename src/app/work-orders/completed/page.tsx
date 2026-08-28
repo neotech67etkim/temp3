@@ -4,11 +4,11 @@ import { orgDb } from "@/lib/db";
 import { getNasStore, getMigrationsDir } from "@/lib/app-config";
 import { allStoreKeys } from "@/lib/work-order-tree";
 import { queryAllDivisions } from "@/lib/multi-division-query";
-import { canManageWorkOrders, workOrderScopeWhere } from "@/lib/org-access";
+import { workOrderScopeWhere } from "@/lib/org-access";
 import { BackToDashboard } from "@/components/back-to-dashboard";
 import { WorkOrderGroupedList } from "@/components/work-order-grouped-list";
 
-export default async function WorkOrdersPage({
+export default async function CompletedWorkOrdersPage({
   searchParams,
 }: {
   searchParams: Promise<{ dept?: string; div?: string }>;
@@ -16,8 +16,6 @@ export default async function WorkOrdersPage({
   const { dept: deptFilter, div: divFilter } = await searchParams;
   const session = await auth();
   if (!session?.user) return null;
-
-  const canManage = canManageWorkOrders(session.user.role);
 
   const store = getNasStore();
   const migrationsDir = getMigrationsDir();
@@ -27,7 +25,7 @@ export default async function WorkOrdersPage({
   const results = await queryAllDivisions(store, divisionKeys, migrationsDir, (client) =>
     client.workOrder.findMany({
       where: {
-        AND: [workOrderScopeWhere(session.user), { status: { not: "COMPLETED" } }],
+        AND: [workOrderScopeWhere(session.user), { status: "COMPLETED" }],
       },
       include: {
         project: { select: { name: true } },
@@ -60,8 +58,9 @@ export default async function WorkOrdersPage({
   const workOrders = results
     .flatMap((r) => r.value)
     .sort((a, b) => {
-      if (a.priority !== b.priority) return a.priority.localeCompare(b.priority);
-      return b.createdAt.getTime() - a.createdAt.getTime();
+      const aDone = a.completedAt?.getTime() ?? a.createdAt.getTime();
+      const bDone = b.completedAt?.getTime() ?? b.createdAt.getTime();
+      return bDone - aDone;
     })
     .slice(0, 100);
 
@@ -70,34 +69,22 @@ export default async function WorkOrdersPage({
       <BackToDashboard />
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">
-            Work Order 목록
-          </h1>
+          <h1 className="text-xl font-semibold text-slate-900">완료된 업무</h1>
           <p className="mt-1 text-sm text-slate-500">
-            내 권한 범위에 해당하는 업무지시를 과 단위로 묶어서 보여줍니다.
-            완료된 업무는{" "}
-            <Link href="/work-orders/completed" className="text-blue-600 hover:underline">
-              완료된 업무 보기
+            완료 처리된 업무만 모아서 보여줍니다.{" "}
+            <Link href="/work-orders" className="text-blue-600 hover:underline">
+              진행 중인 업무 보기
             </Link>
-            에서 따로 확인할 수 있습니다.
           </p>
           {(deptFilter || divFilter) && (
             <p className="mt-2 text-xs text-slate-500">
               필터: <strong>{divFilter ?? deptFilter}</strong>{" "}
-              <Link href="/work-orders" className="text-blue-600 hover:underline">
+              <Link href="/work-orders/completed" className="text-blue-600 hover:underline">
                 전체 보기
               </Link>
             </p>
           )}
         </div>
-        {canManage && (
-          <Link
-            href="/work-orders/new"
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            + 새 업무 할당
-          </Link>
-        )}
       </div>
 
       <WorkOrderGroupedList
