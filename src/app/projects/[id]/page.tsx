@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { orgDb } from "@/lib/db";
-import { getNasStore, getMigrationsDir } from "@/lib/app-config";
 import {
   DEPT_COMMON_KEY,
   allStoreKeys,
@@ -29,12 +28,10 @@ export default async function ProjectDetailPage({
 
   if (!project) notFound();
 
-  const store = getNasStore();
-  const migrationsDir = getMigrationsDir();
   const divisions = await orgDb.division.findMany({ select: { name: true } });
   const divisionKeys = allStoreKeys(divisions.map((d) => d.name));
 
-  const located = await getProjectWorkOrdersDetailed(store, divisionKeys, migrationsDir, id);
+  const located = await getProjectWorkOrdersDetailed(divisionKeys, id);
   const workOrders = located
     .map((r) => r.workOrder)
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());

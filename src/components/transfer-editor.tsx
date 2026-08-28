@@ -40,9 +40,9 @@ export function TransferEditor({
     undefined,
   );
 
-  // NAS 공유 파일 잠금/쓰기 때문에 이관 처리가 몇 초 걸릴 수 있어서,
-  // 처리 중에는 버튼을 "이관 처리 중..."으로 바꿔 보여주고(TransferSubmitButton),
-  // 완료되면 결과를 알림창으로 띄워 사용자가 놓치지 않게 한다.
+  // 이관 처리 중에는 버튼을 "이관 처리 중..."으로 바꿔 보여주고
+  // (TransferSubmitButton), 완료되면 결과를 알림창으로 띄워 사용자가
+  // 놓치지 않게 한다.
   useEffect(() => {
     if (state?.message) alert(state.message);
   }, [state]);

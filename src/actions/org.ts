@@ -6,9 +6,9 @@ import type { Role } from "@prisma/client";
 import { orgDb } from "@/lib/db";
 import { auth } from "@/auth";
 import { canManageOrg } from "@/lib/org-access";
-import { NasStore } from "@/lib/nas-store";
+import { resyncOrgToOpenDivisions } from "@/lib/division-db";
 import { queryAllDivisions } from "@/lib/multi-division-query";
-import { getNasStoreConfig, getMigrationsDir } from "@/lib/app-config";
+import { getDataDir } from "@/lib/app-config";
 import { exportOrgForCopilot } from "@/lib/copilot-export";
 
 async function requireAdmin() {
@@ -21,12 +21,16 @@ async function requireAdmin() {
 
 /**
  * 조직도가 바뀔 때마다(부서/과/팀/사용자 추가·삭제) Copilot용 조직도 문서도
- * 같이 갱신한다. 실패해도 방금 끝난 실제 조직 변경에는 영향이 없어야 하므로
- * 에러는 콘솔에만 남긴다(work-orders.ts의 syncDivision과 같은 패턴).
+ * 같이 갱신하고, 이미 열려 있는 과 파일들의 조직도 미러도 최신으로 맞춘다.
+ * 둘 다 실패해도 방금 끝난 실제 조직 변경에는 영향이 없어야 하므로 에러는
+ * 콘솔에만 남긴다.
  */
 function syncOrgExport(): void {
-  void exportOrgForCopilot(orgDb, getNasStoreConfig().nasRoot).catch((err) => {
+  void exportOrgForCopilot(orgDb, getDataDir()).catch((err) => {
     console.error("[copilot-export] 조직도 내보내기 실패:", err);
+  });
+  void resyncOrgToOpenDivisions().catch((err) => {
+    console.error("[org-sync] 열린 과 파일에 조직도 반영 실패:", err);
   });
 }
 
@@ -127,11 +131,8 @@ export async function deleteUser(formData: FormData) {
   // WorkOrder는 org.db가 아니라 각 과 파일에 있으므로, 전체 과 파일을 훑어서
   // 이 사용자가 어딘가에 업무를 만든 적이 있는지 확인해야 한다.
   const divisions = await orgDb.division.findMany({ select: { name: true } });
-  const store = new NasStore(getNasStoreConfig());
   const counts = await queryAllDivisions(
-    store,
     divisions.map((d) => d.name),
-    getMigrationsDir(),
     (client) => client.workOrder.count({ where: { createdById: id } }),
   );
   const totalCreated = counts.reduce((sum, r) => sum + r.value, 0);

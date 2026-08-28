@@ -1,6 +1,5 @@
 import { auth } from "@/auth";
-import { orgDb, getActiveContextInfo } from "@/lib/db";
-import { getNasStore, getMigrationsDir } from "@/lib/app-config";
+import { orgDb } from "@/lib/db";
 import { allStoreKeys, findWorkOrderById } from "@/lib/work-order-tree";
 import {
   assignableTypesFor,
@@ -9,7 +8,6 @@ import {
 } from "@/lib/org-access";
 import { WorkOrderForm } from "@/components/work-order-form";
 import { BackToDashboard } from "@/components/back-to-dashboard";
-import { EditModeNotice } from "@/components/edit-mode-notice";
 
 export default async function NewWorkOrderPage({
   searchParams,
@@ -30,11 +28,6 @@ export default async function NewWorkOrderPage({
 
   const isAdmin = session.user.role === "ADMIN";
   const allowedTypes = assignableTypesFor(session.user.role);
-  const activeContext = getActiveContextInfo();
-  // mode==="edit"만으로는 다른 사람의 편집 세션과 구분이 안 되므로 소유자까지 확인한다.
-  const isEditing =
-    activeContext?.mode === "edit" &&
-    activeContext.holder.email === session.user.email;
 
   const [projects, departments, divisions, teams, users] = await Promise.all([
     orgDb.project.findMany({ orderBy: { name: "asc" } }),
@@ -55,11 +48,9 @@ export default async function NewWorkOrderPage({
 
   let parent: { title: string } | null = null;
   if (parentId) {
-    const store = getNasStore();
-    const migrationsDir = getMigrationsDir();
     const allDivisions = await orgDb.division.findMany({ select: { name: true } });
     const divisionKeys = allStoreKeys(allDivisions.map((d) => d.name));
-    const located = await findWorkOrderById(store, divisionKeys, migrationsDir, parentId);
+    const located = await findWorkOrderById(divisionKeys, parentId);
     parent = located ? { title: located.workOrder.title } : null;
   }
 
@@ -80,20 +71,16 @@ export default async function NewWorkOrderPage({
       )}
 
       <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
-        {isEditing ? (
-          <WorkOrderForm
-            projects={projects}
-            departments={departments}
-            divisions={divisions}
-            teams={teams}
-            users={users}
-            allowedTypes={allowedTypes}
-            defaultProjectId={projectId}
-            parentId={parentId}
-          />
-        ) : (
-          <EditModeNotice message="업무를 할당하려면" />
-        )}
+        <WorkOrderForm
+          projects={projects}
+          departments={departments}
+          divisions={divisions}
+          teams={teams}
+          users={users}
+          allowedTypes={allowedTypes}
+          defaultProjectId={projectId}
+          parentId={parentId}
+        />
       </div>
     </div>
   );

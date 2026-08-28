@@ -1,6 +1,5 @@
 import { orgDb } from "@/lib/db";
 import { computeProgress } from "@/lib/progress";
-import type { NasStore } from "@/lib/nas-store";
 import { queryAllDivisions } from "@/lib/multi-division-query";
 
 export type OrgProgressNode = {
@@ -16,16 +15,14 @@ export type OrgProgressNode = {
  * 특정 단계(부서/과/팀/개인)에 할당된 업무는 그 상위 조직 단계까지 누적 반영된다.
  */
 export async function getOrgProgressTree(
-  store: NasStore,
   divisionKeys: string[],
-  migrationsDir: string,
 ): Promise<OrgProgressNode[]> {
   const [departments, results] = await Promise.all([
     orgDb.department.findMany({
       include: { divisions: { include: { teams: true } } },
       orderBy: { name: "asc" },
     }),
-    queryAllDivisions(store, divisionKeys, migrationsDir, (client) =>
+    queryAllDivisions(divisionKeys, (client) =>
       client.workOrder.findMany({
         select: {
           id: true,

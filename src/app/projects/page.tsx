@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/auth";
-import { orgDb, getActiveContextInfo } from "@/lib/db";
-import { getNasStore, getMigrationsDir } from "@/lib/app-config";
+import { orgDb } from "@/lib/db";
 import { allStoreKeys } from "@/lib/work-order-tree";
 import { queryAllDivisions } from "@/lib/multi-division-query";
 import { computeProgress } from "@/lib/progress";
@@ -9,23 +8,14 @@ import { canManageWorkOrders } from "@/lib/org-access";
 import { createProject, createCategory } from "@/actions/work-orders";
 import { ProgressBar } from "@/components/progress-bar";
 import { BackToDashboard } from "@/components/back-to-dashboard";
-import { EditModeNotice } from "@/components/edit-mode-notice";
 
 export default async function ProjectsPage() {
   const session = await auth();
   const canManage = session?.user ? canManageWorkOrders(session.user.role) : false;
-  const activeContext = getActiveContextInfo();
-  // mode==="edit"만으로는 다른 사람의 편집 세션과 구분이 안 되므로 소유자까지 확인한다.
-  const isEditing =
-    activeContext?.mode === "edit" &&
-    activeContext.holder.email === session?.user?.email;
 
   // Project/Category는 division 파일이 아니라 조직 원본(org.db)에 있으므로
   // orgDb로 읽고, 각 프로젝트의 진행률 계산에 필요한 WorkOrder만 전체 과
-  // 파일에서 모아온다(현재 체크아웃된 과가 없어도 항상 조회 가능해야 함 -
-  // "모니터링 모드"에서도 프로젝트 목록은 볼 수 있어야 하기 때문).
-  const store = getNasStore();
-  const migrationsDir = getMigrationsDir();
+  // 파일에서 모아온다.
   const divisions = await orgDb.division.findMany({ select: { name: true } });
   const divisionKeys = allStoreKeys(divisions.map((d) => d.name));
 
@@ -35,7 +25,7 @@ export default async function ProjectsPage() {
       orderBy: { createdAt: "desc" },
     }),
     orgDb.category.findMany({ orderBy: { name: "asc" } }),
-    queryAllDivisions(store, divisionKeys, migrationsDir, (client) =>
+    queryAllDivisions(divisionKeys, (client) =>
       client.workOrder.findMany({
         select: { id: true, parentId: true, projectId: true, progress: true },
       }),
@@ -125,13 +115,7 @@ export default async function ProjectsPage() {
         )}
       </div>
 
-      {canManage && !isEditing && (
-        <div className="mt-6">
-          <EditModeNotice message="업무영역/프로젝트를 추가하려면" />
-        </div>
-      )}
-
-      {canManage && isEditing && (
+      {canManage && (
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <form
             action={createCategory}

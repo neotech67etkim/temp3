@@ -4,14 +4,12 @@
  * 훑어서 부모/자식/프로젝트 전체 업무를 애플리케이션 레벨로 찾아준다.
  *
  * 부서 전체(특정 과에 속하지 않는) 업무는 DEPT_COMMON_KEY 파일에 저장된다 -
- * org.db(조직도 원본)와는 별개의 파일로, 잠금 경합이 조직 관리와 섞이지 않게 한다.
+ * org.db(조직도 원본)와는 별개의 파일이다.
  */
 
 import { PrismaClient, type WorkOrder } from "@prisma/client";
-import { NasStore, type LockInfo } from "./nas-store";
 import { queryAllDivisions } from "./multi-division-query";
-import { ensureSchema } from "./schema-init";
-import { getHeldClient } from "./db";
+import { getDivisionDb } from "./division-db";
 
 export const DEPT_COMMON_KEY = "__부서공통__";
 
@@ -36,23 +34,19 @@ export type LocatedWorkOrderWithAssignee = {
 };
 
 async function collectAcrossDivisions<T>(
-  store: NasStore,
   divisionKeys: string[],
-  migrationsDir: string,
   queryFn: (client: PrismaClient, key: string) => Promise<T[]>,
 ): Promise<Array<{ key: string; value: T }>> {
-  const results = await queryAllDivisions(store, divisionKeys, migrationsDir, queryFn);
+  const results = await queryAllDivisions(divisionKeys, queryFn);
   return results.flatMap((r) => r.value.map((value) => ({ key: r.key, value })));
 }
 
 /** 특정 WorkOrder id가 어느 과 파일에 있는지 찾는다(id는 전역적으로 고유). */
 export async function findWorkOrderById(
-  store: NasStore,
   divisionKeys: string[],
-  migrationsDir: string,
   id: string,
 ): Promise<LocatedWorkOrder | null> {
-  const results = await collectAcrossDivisions(store, divisionKeys, migrationsDir, (client) =>
+  const results = await collectAcrossDivisions(divisionKeys, (client) =>
     client.workOrder.findMany({ where: { id } }),
   );
   const found = results[0];
@@ -61,12 +55,10 @@ export async function findWorkOrderById(
 
 /** 이 프로젝트에 속한 모든 WorkOrder를 전체 과 파일에서 모아온다. */
 export async function getProjectWorkOrders(
-  store: NasStore,
   divisionKeys: string[],
-  migrationsDir: string,
   projectId: string,
 ): Promise<LocatedWorkOrder[]> {
-  const results = await collectAcrossDivisions(store, divisionKeys, migrationsDir, (client) =>
+  const results = await collectAcrossDivisions(divisionKeys, (client) =>
     client.workOrder.findMany({ where: { projectId } }),
   );
   return results.map((r) => ({ key: r.key, workOrder: r.value }));
@@ -85,12 +77,10 @@ export type LocatedWorkOrderDetailed = {
 
 /** getProjectWorkOrders와 같지만, 담당자/지시자 이름까지 함께 가져온다(트리 화면용). */
 export async function getProjectWorkOrdersDetailed(
-  store: NasStore,
   divisionKeys: string[],
-  migrationsDir: string,
   projectId: string,
 ): Promise<LocatedWorkOrderDetailed[]> {
-  const results = await collectAcrossDivisions(store, divisionKeys, migrationsDir, (client) =>
+  const results = await collectAcrossDivisions(divisionKeys, (client) =>
     client.workOrder.findMany({
       where: { projectId },
       include: {
@@ -107,12 +97,10 @@ export async function getProjectWorkOrdersDetailed(
 
 /** 특정 부모의 직계 자식들을 전체 과 파일에서 모아온다(담당자 표시용 관계 포함). */
 export async function getChildren(
-  store: NasStore,
   divisionKeys: string[],
-  migrationsDir: string,
   parentId: string,
 ): Promise<LocatedWorkOrderWithAssignee[]> {
-  const results = await collectAcrossDivisions(store, divisionKeys, migrationsDir, (client) =>
+  const results = await collectAcrossDivisions(divisionKeys, (client) =>
     client.workOrder.findMany({
       where: { parentId },
       include: {
@@ -128,16 +116,12 @@ export async function getChildren(
 
 /** 특정 루트의 모든 하위(자식의 자식까지) 업무를 전체 과 파일에서 재귀적으로 모아온다. */
 export async function getDescendants(
-  store: NasStore,
   divisionKeys: string[],
-  migrationsDir: string,
   rootId: string,
 ): Promise<LocatedWorkOrder[]> {
   // 모든 과 파일의 전체 WorkOrder를 한 번만 모아서, 메모리에서 트리를 재귀 탐색한다
   // (요청마다 매번 재조회하면 과 파일 수만큼 왕복이 늘어나므로).
-  const all = await collectAcrossDivisions(store, divisionKeys, migrationsDir, (client) =>
-    client.workOrder.findMany(),
-  );
+  const all = await collectAcrossDivisions(divisionKeys, (client) => client.workOrder.findMany());
   const byParent = new Map<string, typeof all>();
   for (const item of all) {
     const pid = item.value.parentId;
@@ -178,149 +162,73 @@ export type WorkOrderDetail = WorkOrder & {
   }>;
 };
 
-/**
- * 상세 화면에 필요한 모든 정보(소속 과 파일과 무관하게 id로 찾아서)를 한 번에 가져온다.
- * 읽기 전용 조회다 - 실제 편집(상태변경/로그추가 등)은 그 업무가 있는 과를
- * 별도로 편집 잠금 걸어서 진행해야 한다.
- */
+/** 상세 화면에 필요한 모든 정보(소속 과 파일과 무관하게 id로 찾아서)를 한 번에 가져온다. */
 export async function getWorkOrderDetail(
-  store: NasStore,
   divisionKeys: string[],
-  migrationsDir: string,
   id: string,
 ): Promise<WorkOrderDetail | null> {
-  const located = await findWorkOrderById(store, divisionKeys, migrationsDir, id);
+  const located = await findWorkOrderById(divisionKeys, id);
   if (!located) return null;
 
-  const paths = store.checkoutReadOnly([located.key]);
-  const dbPath = paths[located.key];
-  if (!dbPath) return null;
-
-  await ensureSchema(dbPath, migrationsDir);
-  const client = new PrismaClient({ datasourceUrl: `file:${dbPath}` });
-  try {
-    const full = await client.workOrder.findUnique({
-      where: { id },
-      include: {
-        project: { select: { id: true, name: true } },
-        assignedDept: { select: { name: true } },
-        assignedDiv: { select: { name: true } },
-        assignedTeam: { select: { name: true } },
-        assignedUser: { select: { name: true } },
-        createdBy: { select: { name: true } },
-        logs: {
-          include: { author: { select: { name: true } } },
-          orderBy: { createdAt: "desc" },
-        },
+  const client = await getDivisionDb(located.key);
+  const full = await client.workOrder.findUnique({
+    where: { id },
+    include: {
+      project: { select: { id: true, name: true } },
+      assignedDept: { select: { name: true } },
+      assignedDiv: { select: { name: true } },
+      assignedTeam: { select: { name: true } },
+      assignedUser: { select: { name: true } },
+      createdBy: { select: { name: true } },
+      logs: {
+        include: { author: { select: { name: true } } },
+        orderBy: { createdAt: "desc" },
       },
-    });
-    if (!full) return null;
-    return { ...full, key: located.key };
-  } finally {
-    await client.$disconnect();
-  }
+    },
+  });
+  if (!full) return null;
+  return { ...full, key: located.key };
 }
-
-export type CascadeUpdateResult =
-  | { ok: true }
-  | { ok: false; blockedKey: string; lock: LockInfo };
 
 /**
  * 루트 업무의 프로젝트가 바뀔 때, 여러 과 파일에 흩어진 하위 업무들의
- * projectId도 함께 맞춰준다. alreadyHeldKeys(현재 편집 세션이 이미 잠그고
- * 있는 키)는 다시 잠그려 하지 않고 바로 갱신한다 - 그 외의 키는 새로 잠금을
- * 확보해야 하며, 하나라도 실패하면 아무것도 바꾸지 않는다.
+ * projectId도 함께 맞춰준다.
  */
 export async function updateDescendantsProjectId(
-  store: NasStore,
   divisionKeys: string[],
-  migrationsDir: string,
   rootId: string,
   newProjectId: string,
-  alreadyHeldKeys: string[],
-  holder: { name: string; email: string },
-): Promise<CascadeUpdateResult> {
-  const descendants = await getDescendants(store, divisionKeys, migrationsDir, rootId);
-  if (descendants.length === 0) return { ok: true };
+): Promise<void> {
+  const descendants = await getDescendants(divisionKeys, rootId);
+  if (descendants.length === 0) return;
 
   const idsByKey = new Map<string, string[]>();
   for (const item of descendants) {
     if (!idsByKey.has(item.key)) idsByKey.set(item.key, []);
     idsByKey.get(item.key)!.push(item.workOrder.id);
   }
-  const keys = [...idsByKey.keys()];
-  const keysToAcquire = keys.filter((k) => !alreadyHeldKeys.includes(k));
 
-  const acquired: string[] = [];
-  for (const key of keysToAcquire) {
-    const { result } = store.checkoutForEdit(key, holder);
-    if (!result.ok) {
-      for (const acquiredKey of acquired) store.discardEdit(acquiredKey);
-      return { ok: false, blockedKey: key, lock: result.lock };
-    }
-    acquired.push(key);
+  for (const [key, ids] of idsByKey) {
+    const client = await getDivisionDb(key);
+    await client.workOrder.updateMany({
+      where: { id: { in: ids } },
+      data: { projectId: newProjectId },
+    });
   }
-
-  for (const key of keys) {
-    // 이미 편집 세션이 들고 있는 과는 그 세션이 열어 둔 커넥션을 그대로 쓴다 -
-    // 같은 로컬 SQLite 파일에 별도 커넥션을 새로 열면 불필요하고 충돌 위험도 있다.
-    const held = alreadyHeldKeys.includes(key) ? getHeldClient(key) : null;
-    if (held) {
-      await held.workOrder.updateMany({
-        where: { id: { in: idsByKey.get(key)! } },
-        data: { projectId: newProjectId },
-      });
-      continue;
-    }
-    const localPath = store.localDbPath(key);
-    await ensureSchema(localPath, migrationsDir);
-    const client = new PrismaClient({ datasourceUrl: `file:${localPath}` });
-    try {
-      await client.workOrder.updateMany({
-        where: { id: { in: idsByKey.get(key)! } },
-        data: { projectId: newProjectId },
-      });
-    } finally {
-      await client.$disconnect();
-    }
-  }
-
-  for (const key of keysToAcquire) {
-    store.checkinAfterEdit(key);
-  }
-  // 편집 세션이 계속 들고 있을 과는 잠금은 유지한 채로 즉시 원본에 반영한다
-  // ("저장하고 종료"를 누르기 전에 문제가 생겨도 변경이 남아있도록).
-  for (const key of keys.filter((k) => alreadyHeldKeys.includes(k))) {
-    store.syncToRemote(key);
-  }
-
-  return { ok: true };
 }
-
-export type CascadeDeleteResult =
-  | { ok: true; deletedCount: number }
-  | { ok: false; blockedKey: string; lock: LockInfo };
 
 /**
  * 업무와 그 하위(자식+손자...) 전체를 삭제한다. parentId가 더 이상 로컬 FK가
- * 아니므로(SQLite의 자동 cascade 불가), 관련된 모든 과 파일을 직접 찾아서
- * 지운다. 관련된 모든 파일의 편집 잠금을 먼저 확보한 뒤에만 실제 삭제를
- * 수행한다 - 하나라도 다른 사람이 편집 중이면 아무것도 지우지 않고 중단한다
- * (일부만 지워진 상태가 되는 걸 막기 위함).
+ * 아니므로(SQLite의 자동 cascade 불가), 관련된 모든 과 파일을 직접 찾아서 지운다.
  */
 export async function deleteWorkOrderCascade(
-  store: NasStore,
   divisionKeys: string[],
-  migrationsDir: string,
   id: string,
-  holder: { name: string; email: string },
-  alreadyHeldKeys: string[] = [],
-): Promise<CascadeDeleteResult> {
-  const target = await findWorkOrderById(store, divisionKeys, migrationsDir, id);
-  if (!target) {
-    return { ok: true, deletedCount: 0 };
-  }
-  const descendants = await getDescendants(store, divisionKeys, migrationsDir, id);
+): Promise<{ deletedCount: number }> {
+  const target = await findWorkOrderById(divisionKeys, id);
+  if (!target) return { deletedCount: 0 };
+
+  const descendants = await getDescendants(divisionKeys, id);
   const allItems = [target, ...descendants];
 
   const idsByKey = new Map<string, string[]>();
@@ -328,54 +236,13 @@ export async function deleteWorkOrderCascade(
     if (!idsByKey.has(item.key)) idsByKey.set(item.key, []);
     idsByKey.get(item.key)!.push(item.workOrder.id);
   }
-  const keys = [...idsByKey.keys()];
-  // 이미 편집 세션이 들고 있는 과(alreadyHeldKeys)는 그 세션의 잠금을 그대로
-  // 쓰면 되므로 다시 잠그려 하지 않는다 - 안 그러면 "이미 내가 잠근 파일"을
-  // 다시 잠그려다 실패해버린다(acquireLock은 누가 잡고 있든 상관없이 이미
-  // 잠긴 파일이면 실패로 취급함).
-  const keysToAcquire = keys.filter((k) => !alreadyHeldKeys.includes(k));
-
-  const acquiredKeys: string[] = [];
-  for (const key of keysToAcquire) {
-    const { result } = store.checkoutForEdit(key, holder);
-    if (!result.ok) {
-      for (const acquiredKey of acquiredKeys) {
-        store.discardEdit(acquiredKey);
-      }
-      return { ok: false, blockedKey: key, lock: result.lock };
-    }
-    acquiredKeys.push(key);
-  }
 
   let deletedCount = 0;
-  for (const key of keys) {
-    const held = alreadyHeldKeys.includes(key) ? getHeldClient(key) : null;
-    if (held) {
-      const result = await held.workOrder.deleteMany({
-        where: { id: { in: idsByKey.get(key)! } },
-      });
-      deletedCount += result.count;
-      continue;
-    }
-    const localPath = store.localDbPath(key);
-    await ensureSchema(localPath, migrationsDir);
-    const client = new PrismaClient({ datasourceUrl: `file:${localPath}` });
-    try {
-      const result = await client.workOrder.deleteMany({
-        where: { id: { in: idsByKey.get(key)! } },
-      });
-      deletedCount += result.count;
-    } finally {
-      await client.$disconnect();
-    }
+  for (const [key, ids] of idsByKey) {
+    const client = await getDivisionDb(key);
+    const result = await client.workOrder.deleteMany({ where: { id: { in: ids } } });
+    deletedCount += result.count;
   }
 
-  for (const key of keysToAcquire) {
-    store.checkinAfterEdit(key);
-  }
-  for (const key of keys.filter((k) => alreadyHeldKeys.includes(k))) {
-    store.syncToRemote(key);
-  }
-
-  return { ok: true, deletedCount };
+  return { deletedCount };
 }

@@ -1,26 +1,17 @@
 import path from "node:path";
-import { NasStore, type NasStoreConfig } from "./nas-store";
 
 /**
- * NAS_ROOT: 원본 저장 위치(회사 NAS 공유 폴더, UNC 경로 또는 마운트된 드라이브).
- * LOCAL_WORKSPACE_ROOT: 체크아웃한 파일을 실제로 여는 로컬 작업 디렉터리.
- * 둘 다 없으면 개발 중 임시 폴더로 fallback.
+ * DATA_DIR: 과별 SQLite 파일(org.db 포함)이 저장되는 위치. 상시 켜진 서버
+ * 자신의 로컬 디스크 경로면 충분하다(예전처럼 NAS 공유 폴더일 필요는 없지만,
+ * 같은 이름의 폴더를 그대로 계속 써도 무방하다). NAS_ROOT는 이전 버전과의
+ * 호환을 위한 별칭이다.
  */
-export function getNasStoreConfig(): NasStoreConfig {
-  const nasRoot = process.env.NAS_ROOT ?? path.join(process.cwd(), ".dev-nas");
-  const localRoot =
-    process.env.LOCAL_WORKSPACE_ROOT ?? path.join(process.cwd(), ".dev-local");
-  return { nasRoot, localRoot };
-}
-
-let cachedStore: NasStore | null = null;
-
-/** 앱 전역에서 재사용하는 NasStore 싱글턴. */
-export function getNasStore(): NasStore {
-  if (!cachedStore) {
-    cachedStore = new NasStore(getNasStoreConfig());
-  }
-  return cachedStore;
+export function getDataDir(): string {
+  return (
+    process.env.DATA_DIR ??
+    process.env.NAS_ROOT ??
+    path.join(process.cwd(), ".dev-data")
+  );
 }
 
 export function getMigrationsDir(): string {

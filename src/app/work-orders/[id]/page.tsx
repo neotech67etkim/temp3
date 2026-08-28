@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auth } from "@/auth";
-import { orgDb, getActiveContextInfo } from "@/lib/db";
-import { getNasStore, getMigrationsDir } from "@/lib/app-config";
+import { orgDb } from "@/lib/db";
 import {
   allStoreKeys,
   findWorkOrderById,
@@ -28,7 +27,6 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { WorkOrderLogForm } from "@/components/work-order-log-form";
 import { WorkOrderLogList } from "@/components/work-order-log-list";
 import { TransferEditor } from "@/components/transfer-editor";
-import { SmartEditStart } from "@/components/smart-edit-start";
 
 export default async function WorkOrderDetailPage({
   params,
@@ -39,20 +37,18 @@ export default async function WorkOrderDetailPage({
   const session = await auth();
   if (!session?.user) return null;
 
-  const store = getNasStore();
-  const migrationsDir = getMigrationsDir();
   const divisions = await orgDb.division.findMany({ select: { name: true } });
   const divisionKeys = allStoreKeys(divisions.map((d) => d.name));
 
-  const workOrder = await getWorkOrderDetail(store, divisionKeys, migrationsDir, id);
+  const workOrder = await getWorkOrderDetail(divisionKeys, id);
   if (!workOrder) notFound();
 
   const [parentLocated, children, projectWorkOrdersLocated] = await Promise.all([
     workOrder.parentId
-      ? findWorkOrderById(store, divisionKeys, migrationsDir, workOrder.parentId)
+      ? findWorkOrderById(divisionKeys, workOrder.parentId)
       : Promise.resolve(null),
-    getChildren(store, divisionKeys, migrationsDir, workOrder.id),
-    getProjectWorkOrders(store, divisionKeys, migrationsDir, workOrder.projectId),
+    getChildren(divisionKeys, workOrder.id),
+    getProjectWorkOrders(divisionKeys, workOrder.projectId),
   ]);
   const parent = parentLocated?.workOrder ?? null;
 
@@ -65,17 +61,8 @@ export default async function WorkOrderDetailPage({
   const rollupProgress = progressMap.get(workOrder.id) ?? workOrder.progress;
 
   const canManage = canManageWorkOrders(session.user.role);
-  const activeContext = getActiveContextInfo();
-  // mode==="edit" + 소유자 확인만으로는 부족하다 - 부서장처럼 여러 과를
-  // 동시에 들고 있을 수 있으므로, "지금 이 업무가 속한 과(workOrder.key)"가
-  // 실제로 보유 목록에 있는지까지 확인해야 편집 컨트롤을 보여줘도 된다.
-  const isEditing =
-    activeContext?.mode === "edit" &&
-    activeContext.holder.email === session.user.email &&
-    activeContext.keys.includes(workOrder.key);
   const isAssignedToMe = workOrder.assignedUserId === session.user.id;
   const hasChildren = children.length > 0;
-  const returnTo = `/work-orders/${workOrder.id}`;
 
   const canDirectAssign =
     canManage &&
@@ -142,7 +129,7 @@ export default async function WorkOrderDetailPage({
         </div>
       </div>
 
-      {canManage && isEditing && (
+      {canManage && (
         <div className="mt-3 flex items-center gap-3">
           <WorkOrderEditForm
             id={workOrder.id}
@@ -165,15 +152,6 @@ export default async function WorkOrderDetailPage({
               삭제
             </ConfirmSubmitButton>
           </form>
-        </div>
-      )}
-      {canManage && !isEditing && (
-        <div className="mt-3">
-          <SmartEditStart
-            divisionKey={workOrder.key}
-            returnTo={returnTo}
-            message="이 업무를 수정하거나 삭제하려면 먼저 편집을 시작하세요."
-          />
         </div>
       )}
 
@@ -210,61 +188,50 @@ export default async function WorkOrderDetailPage({
 
       {(canManage || isAssignedToMe) && (
         <div className="mt-4 flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-5">
-          {!isEditing && (
-            <SmartEditStart
-              divisionKey={workOrder.key}
-              returnTo={returnTo}
-              message="상태/진행률을 변경하려면 먼저 편집을 시작하세요."
-            />
+          <div>
+            <p className="mb-1 text-xs font-medium text-slate-500">
+              상태 변경
+            </p>
+            <StatusEditor id={workOrder.id} status={workOrder.status} />
+          </div>
+          <div>
+            <p className="mb-1 text-xs font-medium text-slate-500">
+              우선순위 변경
+            </p>
+            <PriorityEditor id={workOrder.id} priority={workOrder.priority} />
+          </div>
+          {!hasChildren && (
+            <div>
+              <p className="mb-1 text-xs font-medium text-slate-500">
+                진행률 업데이트
+              </p>
+              <ProgressEditor id={workOrder.id} progress={workOrder.progress} />
+            </div>
           )}
-          {isEditing && (
-            <>
-              <div>
-                <p className="mb-1 text-xs font-medium text-slate-500">
-                  상태 변경
-                </p>
-                <StatusEditor id={workOrder.id} status={workOrder.status} />
-              </div>
-              <div>
-                <p className="mb-1 text-xs font-medium text-slate-500">
-                  우선순위 변경
-                </p>
-                <PriorityEditor id={workOrder.id} priority={workOrder.priority} />
-              </div>
-              {!hasChildren && (
-                <div>
-                  <p className="mb-1 text-xs font-medium text-slate-500">
-                    진행률 업데이트
-                  </p>
-                  <ProgressEditor id={workOrder.id} progress={workOrder.progress} />
-                </div>
-              )}
-              {hasChildren && (
-                <p className="text-xs text-slate-400">
-                  하위 업무가 있어 진행률은 하위 업무 평균으로 자동 계산됩니다.
+          {hasChildren && (
+            <p className="text-xs text-slate-400">
+              하위 업무가 있어 진행률은 하위 업무 평균으로 자동 계산됩니다.
+            </p>
+          )}
+          {canDirectAssign && transferCandidates.length > 0 && (
+            <div>
+              <p className="mb-1 text-xs font-medium text-slate-500">
+                {workOrder.assigneeType === "USER"
+                  ? "담당자 변경(이관)"
+                  : "담당자 개인 지정"}
+              </p>
+              {workOrder.assigneeType !== "USER" && (
+                <p className="mb-1 text-xs text-slate-400">
+                  하위 업무를 새로 만들지 않고, 이 업무 자체를 소속 인원 개인
+                  담당으로 바로 넘길 수 있습니다.
                 </p>
               )}
-              {canDirectAssign && transferCandidates.length > 0 && (
-                <div>
-                  <p className="mb-1 text-xs font-medium text-slate-500">
-                    {workOrder.assigneeType === "USER"
-                      ? "담당자 변경(이관)"
-                      : "담당자 개인 지정"}
-                  </p>
-                  {workOrder.assigneeType !== "USER" && (
-                    <p className="mb-1 text-xs text-slate-400">
-                      하위 업무를 새로 만들지 않고, 이 업무 자체를 소속 인원 개인
-                      담당으로 바로 넘길 수 있습니다.
-                    </p>
-                  )}
-                  <TransferEditor
-                    id={workOrder.id}
-                    currentUserId={workOrder.assignedUserId}
-                    candidates={transferCandidates}
-                  />
-                </div>
-              )}
-            </>
+              <TransferEditor
+                id={workOrder.id}
+                currentUserId={workOrder.assignedUserId}
+                candidates={transferCandidates}
+              />
+            </div>
           )}
         </div>
       )}
@@ -320,15 +287,7 @@ export default async function WorkOrderDetailPage({
           진행관련 정보 및 질문
         </h2>
         <div className="mb-6 border-b border-slate-100 pb-6">
-          {isEditing ? (
-            <WorkOrderLogForm workOrderId={workOrder.id} />
-          ) : (
-            <SmartEditStart
-              divisionKey={workOrder.key}
-              returnTo={returnTo}
-              message="진행 관련 정보를 남기려면 먼저 편집을 시작하세요."
-            />
-          )}
+          <WorkOrderLogForm workOrderId={workOrder.id} />
         </div>
         <WorkOrderLogList logs={workOrder.logs} />
       </div>

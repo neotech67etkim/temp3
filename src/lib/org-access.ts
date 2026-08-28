@@ -126,7 +126,7 @@ export function canManageOrg(role: Role): boolean {
 export const DEPT_COMMON_LABEL = "부서 공통";
 
 /**
- * 이 사용자가 "편집 모드"로 체크아웃할 수 있는 과(파일 키) 목록을 정한다.
+ * 이 사용자가 쓰기(수정/추가/댓글)할 수 있는 과(파일 키) 목록을 정한다.
  * deptCommonKey는 work-order-tree.ts의 DEPT_COMMON_KEY를 그대로 넘겨받는다
  * (org-access.ts는 저장소 구현을 몰라도 되게 하기 위해 상수를 여기 두지 않음).
  * - ADMIN: 전체 과 + 부서 공통

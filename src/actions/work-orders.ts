@@ -5,22 +5,19 @@ import { redirect } from "next/navigation";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { AssigneeType, Priority, WorkOrderStatus } from "@prisma/client";
-import {
-  prisma,
-  orgDb,
-  getActiveContextInfo,
-  getHeldClient,
-  switchCurrentDivision,
-} from "@/lib/db";
+import { AssigneeType, Priority, WorkOrderStatus, type PrismaClient } from "@prisma/client";
+import { orgDb } from "@/lib/db";
+import { getDivisionDb } from "@/lib/division-db";
 import { auth } from "@/auth";
 import {
   assignableTypesFor,
   assignableUsersWhere,
   canManageWorkOrders,
+  editableDivisionKeysFor,
   workOrderScopeWhere,
+  type ScopedUser,
 } from "@/lib/org-access";
-import { getNasStore, getNasStoreConfig, getMigrationsDir } from "@/lib/app-config";
+import { getDataDir } from "@/lib/app-config";
 import { exportDivisionForCopilot } from "@/lib/copilot-export";
 import {
   DEPT_COMMON_KEY,
@@ -30,85 +27,37 @@ import {
   updateDescendantsProjectId,
 } from "@/lib/work-order-tree";
 
-/**
- * 지금 편집 세션이 열려 있는지, 그리고 그 세션을 시작한 사람이 지금 요청을
- * 보낸 사람과 같은지 확인한다(없으면 /select-division으로 유도). 활성
- * 상태는 프로세스 전역이라서, 이 확인이 없으면 다른 사람이 시작한 편집
- * 세션에 대고 마치 자기 편집인 것처럼 내용을 바꿔버릴 수 있다.
- */
-function requireActiveEditSession(userEmail: string): void {
-  const info = getActiveContextInfo();
-  if (!info || info.mode !== "edit") {
-    throw new Error(
-      "지금 편집 중인 과가 없습니다. 화면 상단의 '편집 시작'에서 편집할 과를 먼저 선택하세요.",
-    );
-  }
-  if (info.holder.email !== userEmail) {
-    throw new Error(
-      `이 편집 세션은 ${info.holder.name}님이 시작했습니다. 본인이 시작한 편집만 내용을 바꿀 수 있습니다.`,
-    );
-  }
-}
-
-/**
- * 지금 편집 세션이 들고 있는 과들 중 이 id가 실제로 있는 과를 찾아서
- * prisma가 가리키는 대상을 그 과로 전환한다(부서장의 "전체 편집 시작"처럼
- * 여러 과를 동시에 들고 있을 수 있으므로, 어느 업무를 만지든 자동으로 맞는
- * 과 파일을 골라준다). 어느 held 과에도 없으면 null.
- */
-async function switchToHeldDivisionOf(id: string): Promise<string | null> {
-  const info = getActiveContextInfo();
-  if (!info) return null;
-  const ordered = info.currentKey
-    ? [info.currentKey, ...info.keys.filter((k) => k !== info.currentKey)]
-    : info.keys;
-  for (const key of ordered) {
-    const client = getHeldClient(key);
-    if (!client) continue;
-    const found = await client.workOrder.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-    if (found) {
-      switchCurrentDivision(key);
-      return key;
-    }
-  }
-  return null;
-}
-
-/**
- * 개별 작업 하나가 끝날 때마다 그 과를 즉시 원본(NAS)에 반영한다(잠금은
- * 계속 유지). "저장하고 종료"를 몰아서 누르기 전에 문제가 생겨도, 마지막
- * 개별 작업까지는 원본에 남아있도록 하기 위함 - 몰아서 저장하면 그 사이
- * 작업 내용이 통째로 날아갈 수 있어서 매번 즉시 반영한다.
- */
-function syncDivision(key: string): void {
-  getNasStore().syncToRemote(key);
-
-  // Copilot(사내 M365)이 나중에 SharePoint를 통해 읽을 수 있도록, 같은 시점에
-  // 이 과의 업무 현황/변경 이력 Markdown 문서도 NAS에 함께 갱신해둔다. 이
-  // export가 실패해도 방금 끝난 실제 저장(위 syncToRemote)에는 영향이 없어야
-  // 하므로, 에러는 콘솔에만 남기고 액션 자체는 그대로 성공 처리한다.
-  const client = getHeldClient(key);
-  if (client) {
-    void exportDivisionForCopilot(client, key, getNasStoreConfig().nasRoot).catch((err) => {
-      console.error(`[copilot-export] "${key}" 내보내기 실패:`, err);
-    });
-  }
-}
-
-/** id가 지금 편집 세션에 없는 과에 있을 때 보여줄 안내 메시지를 만든다. */
-async function wrongDivisionError(id: string): Promise<Error> {
-  const store = getNasStore();
-  const migrationsDir = getMigrationsDir();
+async function allDivisionKeys(): Promise<string[]> {
   const divisions = await orgDb.division.findMany({ select: { name: true } });
-  const divisionKeys = allStoreKeys(divisions.map((d) => d.name));
-  const located = await findWorkOrderById(store, divisionKeys, migrationsDir, id);
-  if (!located) return new Error("해당 업무를 찾을 수 없습니다.");
-  return new Error(
-    `이 업무는 "${located.key}"에 있습니다. 편집하려면 화면 상단 '편집 시작'에서 그 과를 먼저 선택하세요.`,
-  );
+  return allStoreKeys(divisions.map((d) => d.name));
+}
+
+/** 이 사용자가 이 과 파일을 건드릴 권한이 있는지 확인한다(부서장은 소속 부서
+ *  전체+부서공통, 과장/팀장/과원은 자기 과만). */
+async function assertEditableDivision(user: ScopedUser, key: string): Promise<void> {
+  const allDivisions = await orgDb.division.findMany({
+    select: { id: true, name: true, departmentId: true },
+  });
+  const allowed = editableDivisionKeysFor(user, allDivisions, DEPT_COMMON_KEY);
+  if (!allowed.some((o) => o.key === key)) {
+    throw new Error(`"${key}"를 수정할 권한이 없습니다.`);
+  }
+}
+
+/** id로 업무를 찾아 그 업무가 저장된 과 키를 돌려준다. 없으면 에러. */
+async function locateOrThrow(id: string): Promise<string> {
+  const located = await findWorkOrderById(await allDivisionKeys(), id);
+  if (!located) throw new Error("해당 업무를 찾을 수 없습니다.");
+  return located.key;
+}
+
+/** 이 업무가 사용자의 권한 범위(관리 범위 또는 본인 담당) 안에 있는지 확인하고 돌려준다. */
+async function requireScopedWorkOrder(client: PrismaClient, id: string, user: ScopedUser) {
+  const workOrder = await client.workOrder.findFirst({
+    where: { id, ...workOrderScopeWhere(user) },
+  });
+  if (!workOrder) throw new Error("이 업무를 수정할 권한이 없습니다.");
+  return workOrder;
 }
 
 /** 할당 대상(assigneeType/assigneeId)이 물리적으로 저장되어야 할 과 파일 키를 계산한다. */
@@ -157,6 +106,19 @@ async function requireManager() {
   return session.user;
 }
 
+/**
+ * 이 과의 업무 현황/변경 이력 Markdown 문서를 Copilot(사내 M365)이 읽을 수
+ * 있도록 갱신한다. 실패해도 방금 끝난 실제 저장에는 영향이 없어야 하므로,
+ * 에러는 콘솔에만 남기고 액션 자체는 그대로 성공 처리한다.
+ */
+function refreshCopilotExport(key: string): void {
+  void getDivisionDb(key)
+    .then((client) => exportDivisionForCopilot(client, key, getDataDir()))
+    .catch((err) => {
+      console.error(`[copilot-export] "${key}" 내보내기 실패:`, err);
+    });
+}
+
 const ASSIGNEE_FIELD: Record<AssigneeType, string> = {
   DEPARTMENT: "assignedDeptId",
   DIVISION: "assignedDivId",
@@ -185,13 +147,9 @@ export async function createWorkOrder(formData: FormData) {
     throw new Error("해당 단위로 할당할 권한이 없습니다.");
   }
 
-  requireActiveEditSession(user.email ?? "");
-  const expectedKey = await resolveTargetDivisionKey(assigneeType, assigneeId);
-  if (expectedKey && !switchCurrentDivision(expectedKey)) {
-    throw new Error(
-      `이 할당 대상은 "${expectedKey}"에 속합니다. 지금 편집 세션에 그 과가 포함되어 있지 않습니다. 화면 상단 '편집 시작'에서 그 과를 먼저 여세요.`,
-    );
-  }
+  const targetKey = await resolveTargetDivisionKey(assigneeType, assigneeId);
+  if (!targetKey) throw new Error("할당 대상을 찾을 수 없습니다.");
+  await assertEditableDivision(user, targetKey);
 
   if (assigneeType === AssigneeType.USER) {
     const assignable = await orgDb.user.findFirst({
@@ -203,7 +161,8 @@ export async function createWorkOrder(formData: FormData) {
     }
   }
 
-  await prisma.workOrder.create({
+  const client = await getDivisionDb(targetKey);
+  await client.workOrder.create({
     data: {
       title,
       description,
@@ -216,7 +175,7 @@ export async function createWorkOrder(formData: FormData) {
       [ASSIGNEE_FIELD[assigneeType]]: assigneeId,
     },
   });
-  if (expectedKey) syncDivision(expectedKey);
+  refreshCopilotExport(targetKey);
 
   revalidatePath("/work-orders");
   revalidatePath("/dashboard");
@@ -242,17 +201,15 @@ export async function createMyTodo(formData: FormData) {
     throw new Error("제목과 프로젝트를 입력하세요.");
   }
 
-  requireActiveEditSession(session.user.email ?? "");
-  const expectedKey = session.user.divisionId
-    ? (await orgDb.division.findUnique({ where: { id: session.user.divisionId } }))?.name
+  const targetKey = session.user.divisionId
+    ? (await orgDb.division.findUnique({ where: { id: session.user.divisionId } }))?.name ??
+      null
     : DEPT_COMMON_KEY;
-  if (expectedKey && !switchCurrentDivision(expectedKey)) {
-    throw new Error(
-      `내 할일은 "${expectedKey}"에 저장됩니다. 화면 상단 '편집 시작'에서 그 과를 먼저 여세요.`,
-    );
-  }
+  if (!targetKey) throw new Error("소속 과를 확인할 수 없습니다.");
+  await assertEditableDivision(session.user, targetKey);
 
-  await prisma.workOrder.create({
+  const client = await getDivisionDb(targetKey);
+  await client.workOrder.create({
     data: {
       title,
       description,
@@ -264,7 +221,7 @@ export async function createMyTodo(formData: FormData) {
       createdById: session.user.id,
     },
   });
-  if (expectedKey) syncDivision(expectedKey);
+  refreshCopilotExport(targetKey);
 
   revalidatePath("/dashboard");
 }
@@ -272,21 +229,21 @@ export async function createMyTodo(formData: FormData) {
 export async function updateWorkOrderStatus(id: string, formData: FormData) {
   const session = await auth();
   if (!session?.user) throw new Error("로그인이 필요합니다.");
-  requireActiveEditSession(session.user.email ?? "");
 
-  const targetKey = await switchToHeldDivisionOf(id);
-  if (!targetKey) throw await wrongDivisionError(id);
+  const targetKey = await locateOrThrow(id);
+  const client = await getDivisionDb(targetKey);
+  await requireScopedWorkOrder(client, id, session.user);
 
   const status = formData.get("status") as WorkOrderStatus;
 
-  const workOrder = await prisma.workOrder.update({
+  const workOrder = await client.workOrder.update({
     where: { id },
     data: {
       status,
       completedAt: status === WorkOrderStatus.COMPLETED ? new Date() : null,
     },
   });
-  syncDivision(targetKey);
+  refreshCopilotExport(targetKey);
 
   revalidatePath("/work-orders");
   revalidatePath(`/work-orders/${id}`);
@@ -297,10 +254,10 @@ export async function updateWorkOrderStatus(id: string, formData: FormData) {
 export async function updateWorkOrderProgress(id: string, formData: FormData) {
   const session = await auth();
   if (!session?.user) throw new Error("로그인이 필요합니다.");
-  requireActiveEditSession(session.user.email ?? "");
 
-  const targetKey = await switchToHeldDivisionOf(id);
-  if (!targetKey) throw await wrongDivisionError(id);
+  const targetKey = await locateOrThrow(id);
+  const client = await getDivisionDb(targetKey);
+  await requireScopedWorkOrder(client, id, session.user);
 
   const progress = Number(formData.get("progress"));
   const clamped = Math.max(0, Math.min(100, Math.round(progress)));
@@ -311,7 +268,7 @@ export async function updateWorkOrderProgress(id: string, formData: FormData) {
         ? WorkOrderStatus.NOT_STARTED
         : WorkOrderStatus.IN_PROGRESS;
 
-  const workOrder = await prisma.workOrder.update({
+  const workOrder = await client.workOrder.update({
     where: { id },
     data: {
       progress: clamped,
@@ -319,7 +276,7 @@ export async function updateWorkOrderProgress(id: string, formData: FormData) {
       completedAt: status === WorkOrderStatus.COMPLETED ? new Date() : null,
     },
   });
-  syncDivision(targetKey);
+  refreshCopilotExport(targetKey);
 
   revalidatePath("/work-orders");
   revalidatePath(`/work-orders/${id}`);
@@ -327,14 +284,18 @@ export async function updateWorkOrderProgress(id: string, formData: FormData) {
   revalidatePath("/dashboard");
 }
 
-/** 담당자가 진행관련 정보 및 질문(텍스트/스크린샷/참고 파일 경로)을 남긴다. */
+/**
+ * 담당자가 진행관련 정보 및 질문(텍스트/스크린샷/참고 파일 경로)을 남긴다.
+ * 담당자 본인이 아니어도, 그 업무가 속한 과 소속이면 누구나 남길 수 있다
+ * (진행 상황을 묻거나 참고할 내용을 공유하는 용도이기 때문).
+ */
 export async function addWorkOrderLog(workOrderId: string, formData: FormData) {
   const session = await auth();
   if (!session?.user) throw new Error("로그인이 필요합니다.");
-  requireActiveEditSession(session.user.email ?? "");
 
-  const targetKey = await switchToHeldDivisionOf(workOrderId);
-  if (!targetKey) throw await wrongDivisionError(workOrderId);
+  const targetKey = await locateOrThrow(workOrderId);
+  await assertEditableDivision(session.user, targetKey);
+  const client = await getDivisionDb(targetKey);
 
   const note = String(formData.get("note") ?? "").trim();
   const filePath = String(formData.get("filePath") ?? "").trim() || null;
@@ -365,12 +326,12 @@ export async function addWorkOrderLog(workOrderId: string, formData: FormData) {
     throw new Error("진행 내용을 입력하거나 스크린샷/파일 경로를 첨부하세요.");
   }
 
-  const workOrder = await prisma.workOrder.findUniqueOrThrow({
+  const workOrder = await client.workOrder.findUniqueOrThrow({
     where: { id: workOrderId },
     select: { progress: true },
   });
 
-  await prisma.workOrderLog.create({
+  await client.workOrderLog.create({
     data: {
       workOrderId,
       authorId: session.user.id,
@@ -380,7 +341,7 @@ export async function addWorkOrderLog(workOrderId: string, formData: FormData) {
       progress: workOrder.progress,
     },
   });
-  syncDivision(targetKey);
+  refreshCopilotExport(targetKey);
 
   revalidatePath(`/work-orders/${workOrderId}`);
 }
@@ -388,18 +349,18 @@ export async function addWorkOrderLog(workOrderId: string, formData: FormData) {
 export async function updateWorkOrderPriority(id: string, formData: FormData) {
   const session = await auth();
   if (!session?.user) throw new Error("로그인이 필요합니다.");
-  requireActiveEditSession(session.user.email ?? "");
 
-  const targetKey = await switchToHeldDivisionOf(id);
-  if (!targetKey) throw await wrongDivisionError(id);
+  const targetKey = await locateOrThrow(id);
+  const client = await getDivisionDb(targetKey);
+  await requireScopedWorkOrder(client, id, session.user);
 
   const priority = formData.get("priority") as Priority;
 
-  const workOrder = await prisma.workOrder.update({
+  const workOrder = await client.workOrder.update({
     where: { id },
     data: { priority },
   });
-  syncDivision(targetKey);
+  refreshCopilotExport(targetKey);
 
   revalidatePath("/work-orders");
   revalidatePath(`/work-orders/${id}`);
@@ -419,15 +380,14 @@ export async function reassignWorkOrder(
   if (!session?.user || !canManageWorkOrders(session.user.role)) {
     throw new Error("업무를 이관할 권한이 없습니다.");
   }
-  requireActiveEditSession(session.user.email ?? "");
 
-  const targetKey = await switchToHeldDivisionOf(id);
-  if (!targetKey) throw await wrongDivisionError(id);
+  const targetKey = await locateOrThrow(id);
+  const client = await getDivisionDb(targetKey);
 
   const newAssigneeId = String(formData.get("assigneeId") ?? "");
   if (!newAssigneeId) throw new Error("이관할 담당자를 선택하세요.");
 
-  const workOrder = await prisma.workOrder.findFirst({
+  const workOrder = await client.workOrder.findFirst({
     where: { id, ...workOrderScopeWhere(session.user) },
     include: {
       assignedUser: { select: { name: true } },
@@ -471,8 +431,8 @@ export async function reassignWorkOrder(
     workOrder.assignedDept?.name ??
     "미지정";
 
-  await prisma.$transaction([
-    prisma.workOrder.update({
+  await client.$transaction([
+    client.workOrder.update({
       where: { id },
       data: {
         assigneeType: AssigneeType.USER,
@@ -483,7 +443,7 @@ export async function reassignWorkOrder(
         transferred: true,
       },
     }),
-    prisma.workOrderLog.create({
+    client.workOrderLog.create({
       data: {
         workOrderId: id,
         authorId: session.user.id,
@@ -491,7 +451,7 @@ export async function reassignWorkOrder(
       },
     }),
   ]);
-  syncDivision(targetKey);
+  refreshCopilotExport(targetKey);
 
   revalidatePath("/work-orders");
   revalidatePath(`/work-orders/${id}`);
@@ -502,10 +462,10 @@ export async function reassignWorkOrder(
 
 export async function updateWorkOrderDetails(id: string, formData: FormData) {
   const user = await requireManager();
-  requireActiveEditSession(user.email ?? "");
 
-  const targetKey = await switchToHeldDivisionOf(id);
-  if (!targetKey) throw await wrongDivisionError(id);
+  const targetKey = await locateOrThrow(id);
+  const client = await getDivisionDb(targetKey);
+  await requireScopedWorkOrder(client, id, user);
 
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || null;
@@ -516,36 +476,17 @@ export async function updateWorkOrderDetails(id: string, formData: FormData) {
   if (!title) throw new Error("제목을 입력하세요.");
   if (!projectId) throw new Error("프로젝트를 선택하세요.");
 
-  const current = await prisma.workOrder.findUniqueOrThrow({
+  const current = await client.workOrder.findUniqueOrThrow({
     where: { id },
     select: { projectId: true, parentId: true },
   });
   const projectChanged = projectId !== current.projectId;
 
   if (projectChanged) {
-    const store = getNasStore();
-    const migrationsDir = getMigrationsDir();
-    const divisions = await orgDb.division.findMany({ select: { name: true } });
-    const divisionKeys = allStoreKeys(divisions.map((d) => d.name));
-    const heldKeys = getActiveContextInfo()!.keys;
-
-    const result = await updateDescendantsProjectId(
-      store,
-      divisionKeys,
-      migrationsDir,
-      id,
-      projectId,
-      heldKeys,
-      { name: user.name ?? user.email ?? "", email: user.email ?? "" },
-    );
-    if (!result.ok) {
-      throw new Error(
-        `"${result.blockedKey}"의 하위 업무를 ${result.lock.holderName}님이 편집 중이라 프로젝트를 변경할 수 없습니다.`,
-      );
-    }
+    await updateDescendantsProjectId(await allDivisionKeys(), id, projectId);
   }
 
-  const workOrder = await prisma.workOrder.update({
+  const workOrder = await client.workOrder.update({
     where: { id },
     data: {
       title,
@@ -556,7 +497,7 @@ export async function updateWorkOrderDetails(id: string, formData: FormData) {
       parentId: projectChanged ? null : undefined,
     },
   });
-  syncDivision(targetKey);
+  refreshCopilotExport(targetKey);
 
   revalidatePath("/work-orders");
   revalidatePath(`/work-orders/${id}`);
@@ -574,32 +515,15 @@ export async function deleteWorkOrder(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) throw new Error("잘못된 요청입니다.");
 
-  const store = getNasStore();
-  const migrationsDir = getMigrationsDir();
-  const divisions = await orgDb.division.findMany({ select: { name: true } });
-  const divisionKeys = allStoreKeys(divisions.map((d) => d.name));
-
-  const located = await findWorkOrderById(store, divisionKeys, migrationsDir, id);
+  const divisionKeys = await allDivisionKeys();
+  const located = await findWorkOrderById(divisionKeys, id);
   if (!located) throw new Error("삭제할 업무를 찾을 수 없습니다.");
   const { projectId, parentId } = located.workOrder;
 
-  // 지금 편집 세션이 이미 들고 있는 과는 다시 잠그려 하지 않는다(이미 내가
-  // 잠근 파일을 또 잠그려 하면 실패하기 때문) - deleteWorkOrderCascade가
-  // 그 과들은 세션이 열어 둔 커넥션을 재사용하고 즉시 원본에 반영한다.
-  const alreadyHeldKeys = getActiveContextInfo()?.keys ?? [];
-  const result = await deleteWorkOrderCascade(
-    store,
-    divisionKeys,
-    migrationsDir,
-    id,
-    { name: user.name ?? user.email ?? "", email: user.email ?? "" },
-    alreadyHeldKeys,
-  );
-  if (!result.ok) {
-    throw new Error(
-      `"${result.blockedKey}" 관련 업무를 ${result.lock.holderName}님이 편집 중이라 삭제할 수 없습니다. 잠시 후 다시 시도하세요.`,
-    );
-  }
+  const client = await getDivisionDb(located.key);
+  await requireScopedWorkOrder(client, id, user);
+
+  await deleteWorkOrderCascade(divisionKeys, id);
 
   revalidatePath("/work-orders");
   revalidatePath("/dashboard");
@@ -609,8 +533,7 @@ export async function deleteWorkOrder(formData: FormData) {
 }
 
 export async function createProject(formData: FormData) {
-  const user = await requireManager();
-  void user;
+  await requireManager();
 
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || null;
@@ -618,9 +541,7 @@ export async function createProject(formData: FormData) {
 
   if (!name) throw new Error("프로젝트명을 입력하세요.");
 
-  // Project는 division 파일이 아니라 조직 원본(org.db)에 저장한다. 여기서
-  // prisma(현재 체크아웃된 과 파일)에 쓰면 그 과 파일에만 갇혀서 다른 모든
-  // 조회(orgDb.project.findMany 등)에서 안 보이게 된다.
+  // Project는 division 파일이 아니라 조직 원본(org.db)에 저장한다.
   await orgDb.project.create({
     data: { name, description, categoryId },
   });

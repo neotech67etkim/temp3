@@ -41,14 +41,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# 보안영역 전용 데이터 (절대 Git에 포함하지 않음)
+# 실제 업무 데이터 (절대 Git에 포함하지 않음)
 /prisma/dev.db
 /prisma/dev.db-journal
 /data/
 /uploads/
 /public/uploads/
+/.dev-data/
 /.dev-nas/
 /.dev-local/
-
-# electron-builder 배포 산출물
-/dist/

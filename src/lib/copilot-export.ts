@@ -1,6 +1,6 @@
 /**
- * 과 파일이 NAS에 저장될 때마다, 그 과의 업무 현황/변경 이력을 Copilot이
- * 읽기 좋은 Markdown 문서로 같은 NAS 위(copilot-export/)에 함께 써둔다.
+ * 과 파일이 저장될 때마다, 그 과의 업무 현황/변경 이력을 Copilot이 읽기 좋은
+ * Markdown 문서로 같은 데이터 폴더 위(copilot-export/)에 함께 써둔다.
  *
  * 이 앱은 SharePoint에 직접 올리지 않는다 - 그건 별도로 정해질 절차(사람이
  * 수동으로 올리거나, 별도 동기화 작업)의 몫이다. 여기서는 그 절차가 그대로
@@ -19,8 +19,8 @@ import { PRIORITY_LABEL } from "@/components/priority-badge";
 import { formatAssignee } from "@/lib/format";
 import { ROLE_LABEL } from "@/lib/org-access";
 
-function exportDir(nasRoot: string): string {
-  return path.join(nasRoot, "copilot-export");
+function exportDir(dataDir: string): string {
+  return path.join(dataDir, "copilot-export");
 }
 
 function formatDate(d: Date | null): string {
@@ -31,7 +31,7 @@ function formatDateTime(d: Date): string {
   return d.toLocaleString("ko-KR");
 }
 
-/** 과 하나의 "현재 업무 현황" Markdown 문서를 생성해 NAS에 쓴다. */
+/** 과 하나의 "현재 업무 현황" Markdown 문서를 생성해 쓴다. */
 async function writeStateDoc(client: PrismaClient, key: string, dir: string): Promise<void> {
   const workOrders = await client.workOrder.findMany({
     include: {
@@ -83,7 +83,7 @@ async function writeStateDoc(client: PrismaClient, key: string, dir: string): Pr
   fs.writeFileSync(path.join(dir, `${key}.md`), lines.join("\n"), "utf-8");
 }
 
-/** 과 하나의 "전체 변경 이력" Markdown 문서를 생성해 NAS에 쓴다(최신순). */
+/** 과 하나의 "전체 변경 이력" Markdown 문서를 생성해 쓴다(최신순). */
 async function writeChangeLogDoc(client: PrismaClient, key: string, dir: string): Promise<void> {
   const logs = await client.workOrderLog.findMany({
     include: {
@@ -114,16 +114,17 @@ async function writeChangeLogDoc(client: PrismaClient, key: string, dir: string)
 }
 
 /**
- * 과 하나의 export 문서(현황 + 변경이력)를 갱신한다. 이미 열려 있는(held) 클라이언트를
- * 그대로 재사용하므로 별도 DB 연결을 만들지 않는다. 실패해도 저장 자체(NAS 반영)를
- * 막으면 안 되므로, 호출하는 쪽에서 실패를 삼키고 로그만 남기는 방식으로 쓴다.
+ * 과 하나의 export 문서(현황 + 변경이력)를 갱신한다. 이 과 파일에 이미 연결된
+ * 클라이언트를 그대로 재사용하므로 별도 DB 연결을 만들지 않는다. 실패해도
+ * 저장 자체를 막으면 안 되므로, 호출하는 쪽에서 실패를 삼키고 로그만 남기는
+ * 방식으로 쓴다.
  */
 export async function exportDivisionForCopilot(
   client: PrismaClient,
   key: string,
-  nasRoot: string,
+  dataDir: string,
 ): Promise<void> {
-  const dir = exportDir(nasRoot);
+  const dir = exportDir(dataDir);
   fs.mkdirSync(dir, { recursive: true });
   await Promise.all([writeStateDoc(client, key, dir), writeChangeLogDoc(client, key, dir)]);
 }
@@ -136,7 +137,7 @@ export async function exportDivisionForCopilot(
  */
 export async function exportOrgForCopilot(
   orgClient: PrismaClient,
-  nasRoot: string,
+  dataDir: string,
 ): Promise<void> {
   const [departments, divisions, teams, users] = await Promise.all([
     orgClient.department.findMany({ orderBy: { name: "asc" } }),
@@ -201,7 +202,7 @@ export async function exportOrgForCopilot(
     lines.push("");
   }
 
-  const dir = exportDir(nasRoot);
+  const dir = exportDir(dataDir);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "조직도.md"), lines.join("\n"), "utf-8");
 }

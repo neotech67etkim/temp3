@@ -4,7 +4,6 @@
   "description": "해양시스템공사부 Work Order 관리 시스템",
   "author": "해양시스템공사부",
   "private": true,
-  "main": "electron/main.js",
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "next dev -p 4200",
@@ -12,44 +11,10 @@
     "start": "next start -p 4200",
     "lint": "eslint",
     "db:migrate": "prisma migrate deploy",
-    "db:seed": "prisma db seed",
-    "electron:start": "electron .",
-    "dist:win": "npm run build && electron-builder --win",
-    "publish:win": "node scripts/publish-release.js"
+    "db:seed": "prisma db seed"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
-  },
-  "build": {
-    "appId": "com.hyundai-marine.workorder",
-    "productName": "WorkOrder",
-    "asar": false,
-    "afterPack": "scripts/after-pack.js",
-    "files": [
-      "electron/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": ".",
-        "to": "app",
-        "filter": [
-          "package.json",
-          ".next/**/*",
-          "node_modules/**/*",
-          "public/**/*",
-          "prisma/**/*",
-          "next.config.ts"
-        ]
-      }
-    ],
-    "win": {
-      "target": "nsis"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "artifactName": "${productName}-Setup-${version}.exe"
-    }
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
@@ -67,8 +32,6 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "electron": "^43.4.0",
-    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
     "tailwindcss": "^4",

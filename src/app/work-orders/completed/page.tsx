@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/auth";
 import { orgDb } from "@/lib/db";
-import { getNasStore, getMigrationsDir } from "@/lib/app-config";
 import { allStoreKeys } from "@/lib/work-order-tree";
 import { queryAllDivisions } from "@/lib/multi-division-query";
 import { workOrderScopeWhere } from "@/lib/org-access";
@@ -17,12 +16,10 @@ export default async function CompletedWorkOrdersPage({
   const session = await auth();
   if (!session?.user) return null;
 
-  const store = getNasStore();
-  const migrationsDir = getMigrationsDir();
   const divisions = await orgDb.division.findMany({ select: { name: true } });
   const divisionKeys = allStoreKeys(divisions.map((d) => d.name));
 
-  const results = await queryAllDivisions(store, divisionKeys, migrationsDir, (client) =>
+  const results = await queryAllDivisions(divisionKeys, (client) =>
     client.workOrder.findMany({
       where: {
         AND: [workOrderScopeWhere(session.user), { status: "COMPLETED" }],

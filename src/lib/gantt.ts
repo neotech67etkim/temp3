@@ -1,6 +1,5 @@
 import type { Prisma } from "@prisma/client";
 import { orgDb } from "@/lib/db";
-import { getNasStore, getMigrationsDir } from "@/lib/app-config";
 import { DEPT_COMMON_KEY } from "@/lib/work-order-tree";
 import { queryAllDivisions } from "@/lib/multi-division-query";
 import { formatAssignee } from "@/lib/format";
@@ -63,10 +62,7 @@ export async function getGanttItems(scope: {
     return [];
   }
 
-  const store = getNasStore();
-  const migrationsDir = getMigrationsDir();
-
-  const results = await queryAllDivisions(store, storeKeys, migrationsDir, (client) =>
+  const results = await queryAllDivisions(storeKeys, (client) =>
     client.workOrder.findMany({
       where,
       include: {
