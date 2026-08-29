@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 > nul
 setlocal enabledelayedexpansion
 
 rem 상시 웹서버로 이 앱을 세팅/실행/업데이트하는 스크립트.
@@ -28,18 +29,21 @@ if not exist .env (
   echo 이 PC의 사내 IP 주소 목록:
   ipconfig | findstr /i "IPv4"
   echo.
-  echo [주의] V:\ 같은 네트워크 공유 드라이브(NAS, UNC 경로)는 안 됩니다.
+  echo [주의] V:\ 같은 네트워크 공유 드라이브 - NAS, UNC 경로 - 는 안 됩니다.
   echo SQLite가 네트워크 드라이브 위에서는 잠금이 불안정해 오류가 납니다.
-  echo 반드시 이 PC의 로컬 디스크 경로를 입력하세요(예: C:\workorder-data).
+  echo 반드시 이 PC의 로컬 디스크 경로를 입력하세요. 예: C:\workorder-data
   echo 기존에 NAS 폴더에 있던 데이터가 있다면, 먼저 그 폴더를 로컬 디스크로
-  echo 복사해 넣고 그 로컬 경로를 입력하세요(예: robocopy "V:\기존 경로"
-  echo "C:\workorder-data" /E).
+  echo 복사해 넣고 그 로컬 경로를 입력하세요.
+  echo 예: robocopy "V:\기존 경로" "C:\workorder-data" /E
   echo.
-  set /p DATA_DIR_INPUT="데이터를 저장할 로컬 폴더 경로를 입력하세요 (예: C:\workorder-data): "
+  set /p DATA_DIR_INPUT="데이터를 저장할 로컬 폴더 경로를 입력하세요: "
   if "!DATA_DIR_INPUT!"=="" set DATA_DIR_INPUT=.\.dev-data
   if not exist "!DATA_DIR_INPUT!" mkdir "!DATA_DIR_INPUT!"
 
-  set /p NEXTAUTH_URL_INPUT="다른 PC에서 접속할 주소를 입력하세요 (예: http://192.168.0.10:4200, 이 PC에서만 쓰면 그냥 Enter): "
+  echo.
+  echo 다른 PC에서 접속할 주소 예시: http://192.168.0.10:4200
+  echo 이 PC에서만 쓸 거면 그냥 Enter만 누르세요.
+  set /p NEXTAUTH_URL_INPUT="접속 주소를 입력하세요: "
   if "!NEXTAUTH_URL_INPUT!"=="" set NEXTAUTH_URL_INPUT=http://localhost:4200
 
   for /f "usebackq delims=" %%s in (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`) do set SECRET=%%s
@@ -80,9 +84,9 @@ if errorlevel 1 (
 
 call pm2 describe workorder >nul 2>nul
 if errorlevel 1 (
-  rem CLI로 "-- start -p 4200"처럼 인자를 넘기면 일부 pm2 버전이 Windows에서
-  rem 그 인자 자체를 스크립트 이름으로 잘못 해석하는 문제가 있어(pm2 자체
-  rem 버그), 인자를 미리 적어둔 ecosystem.config.js로 실행해 우회한다.
+  rem CLI로 인자를 넘기면 일부 pm2 버전이 Windows에서 그 인자 자체를
+  rem 스크립트 이름으로 잘못 해석하는 pm2 자체 버그가 있어, 인자를 미리
+  rem 적어둔 ecosystem.config.js로 실행해 우회한다.
   call pm2 start ecosystem.config.js
 ) else (
   call pm2 restart workorder

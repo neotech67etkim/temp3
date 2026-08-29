@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 > nul
 setlocal
 
 rem 사람이 지켜보지 않아도 안전한 무인 업데이트 스크립트(Windows 작업
@@ -45,7 +46,7 @@ if errorlevel 1 (
 
 call pm2 restart workorder >> "%LOGFILE%" 2>&1
 if errorlevel 1 (
-  echo %date% %time% - pm2 restart 실패(서버가 아직 등록 안 됐다면 server-start.bat을 먼저 실행하세요) >> "%LOGFILE%"
+  echo %date% %time% - pm2 restart 실패 - 서버가 아직 등록 안 됐다면 server-start.bat을 먼저 실행하세요 >> "%LOGFILE%"
   goto :end
 )
 
