@@ -73,7 +73,7 @@ if errorlevel 1 (
 
 call pm2 describe workorder >nul 2>nul
 if errorlevel 1 (
-  call pm2 start npm --name workorder -- run start
+  call pm2 start npm --name workorder -- start
 ) else (
   call pm2 restart workorder
 )

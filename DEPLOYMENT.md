@@ -100,7 +100,7 @@ npm run start
 
 ```bash
 npm install -g pm2
-pm2 start npm --name workorder -- run start
+pm2 start npm --name workorder -- start
 pm2 save
 ```
 
