@@ -100,14 +100,15 @@ npm run start
 
 ```bash
 npm install -g pm2
-pm2 start node_modules\next\dist\bin\next --name workorder -- start -p 4200
+pm2 start ecosystem.config.js
 pm2 save
 ```
 
-(`pm2 start npm -- start`처럼 npm을 거쳐서 실행하면, 일부 pm2 버전이
-Windows에서 인자를 잘못 해석해 "run"/"start"를 스크립트 이름으로 착각하는
-버그가 있습니다. 그래서 npm을 거치지 않고 next 실행 파일을 pm2가 직접
-node로 실행하도록 위처럼 지정합니다.)
+(저장소 루트의 `ecosystem.config.js`가 실행할 스크립트와 인자를 미리
+정의해둡니다. `pm2 start npm -- start`나 `pm2 start ... -- start -p 4200`처럼
+인자를 커맨드라인으로 직접 넘기면, 일부 pm2 버전이 Windows에서 그 인자
+자체를 스크립트 이름으로 잘못 해석하는 버그가 있어("Script not found") 이
+방식으로 우회합니다.)
 
 그다음 Windows 작업 스케줄러에 "로그온 시 `pm2 resurrect` 실행" 작업을
 등록하면, PC가 재부팅돼도 서버가 자동으로 다시 켜집니다.

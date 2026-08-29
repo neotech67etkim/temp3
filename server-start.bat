@@ -73,10 +73,10 @@ if errorlevel 1 (
 
 call pm2 describe workorder >nul 2>nul
 if errorlevel 1 (
-  rem npm(.cmd)을 거쳐서 실행하면 Windows에서 pm2가 인자를 잘못 해석해
-  rem "run"/"start"를 스크립트 이름으로 착각하는 문제가 있어(pm2 자체
-  rem 버그), next 실행 파일을 node로 직접 실행하도록 우회한다.
-  call pm2 start node_modules\next\dist\bin\next --name workorder -- start -p 4200
+  rem CLI로 "-- start -p 4200"처럼 인자를 넘기면 일부 pm2 버전이 Windows에서
+  rem 그 인자 자체를 스크립트 이름으로 잘못 해석하는 문제가 있어(pm2 자체
+  rem 버그), 인자를 미리 적어둔 ecosystem.config.js로 실행해 우회한다.
+  call pm2 start ecosystem.config.js
 ) else (
   call pm2 restart workorder
 )
