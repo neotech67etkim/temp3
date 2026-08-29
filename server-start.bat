@@ -28,7 +28,14 @@ if not exist .env (
   echo 이 PC의 사내 IP 주소 목록:
   ipconfig | findstr /i "IPv4"
   echo.
-  set /p DATA_DIR_INPUT="데이터를 저장할 폴더 경로를 입력하세요 (예: D:\workorder-data): "
+  echo [주의] V:\ 같은 네트워크 공유 드라이브(NAS, UNC 경로)는 안 됩니다.
+  echo SQLite가 네트워크 드라이브 위에서는 잠금이 불안정해 오류가 납니다.
+  echo 반드시 이 PC의 로컬 디스크 경로를 입력하세요(예: C:\workorder-data).
+  echo 기존에 NAS 폴더에 있던 데이터가 있다면, 먼저 그 폴더를 로컬 디스크로
+  echo 복사해 넣고 그 로컬 경로를 입력하세요(예: robocopy "V:\기존 경로"
+  echo "C:\workorder-data" /E).
+  echo.
+  set /p DATA_DIR_INPUT="데이터를 저장할 로컬 폴더 경로를 입력하세요 (예: C:\workorder-data): "
   if "!DATA_DIR_INPUT!"=="" set DATA_DIR_INPUT=.\.dev-data
   if not exist "!DATA_DIR_INPUT!" mkdir "!DATA_DIR_INPUT!"
 
