@@ -41,10 +41,16 @@ if not exist .env (
   if not exist "!DATA_DIR_INPUT!" mkdir "!DATA_DIR_INPUT!"
 
   echo.
-  echo 다른 PC에서 접속할 주소 예시: http://192.168.0.10:4200
+  echo 이 PC에서 다른 프로그램이 이미 4200번 포트를 쓰고 있다면 다른 번호를
+  echo 입력하세요. 잘 모르면 그냥 Enter로 기본값 4200을 쓰세요.
+  set /p PORT_INPUT="사용할 포트 번호를 입력하세요 - 기본값 4200: "
+  if "!PORT_INPUT!"=="" set PORT_INPUT=4200
+
+  echo.
+  echo 다른 PC에서 접속할 주소 예시: http://192.168.0.10:!PORT_INPUT!
   echo 이 PC에서만 쓸 거면 그냥 Enter만 누르세요.
   set /p NEXTAUTH_URL_INPUT="접속 주소를 입력하세요: "
-  if "!NEXTAUTH_URL_INPUT!"=="" set NEXTAUTH_URL_INPUT=http://localhost:4200
+  if "!NEXTAUTH_URL_INPUT!"=="" set NEXTAUTH_URL_INPUT=http://localhost:!PORT_INPUT!
 
   for /f "usebackq delims=" %%s in (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`) do set SECRET=%%s
 
@@ -52,7 +58,7 @@ if not exist .env (
     echo DATA_DIR="!DATA_DIR_INPUT!"
     echo NEXTAUTH_SECRET="!SECRET!"
     echo NEXTAUTH_URL="!NEXTAUTH_URL_INPUT!"
-    echo PORT=4200
+    echo PORT=!PORT_INPUT!
   ) > .env
 
   echo .env 파일을 생성했습니다: !DATA_DIR_INPUT!
