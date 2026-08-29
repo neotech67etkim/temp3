@@ -80,6 +80,18 @@ if errorlevel 1 (
   echo pm2가 설치되어 있지 않아 설치합니다...
   call npm install -g pm2
   if errorlevel 1 goto :error
+
+  where pm2 >nul 2>nul
+  if errorlevel 1 (
+    echo.
+    echo ================================================
+    echo  pm2를 방금 설치했지만, 이 창에는 아직 인식되지 않습니다.
+    echo  이 창을 닫고 새 PowerShell 창을 연 뒤 server-start.bat을
+    echo  다시 실행해주세요. 이미 끝난 단계는 자동으로 건너뛰고
+    echo  5/5부터 이어서 진행됩니다.
+    echo ================================================
+    goto :end
+  )
 )
 
 call pm2 describe workorder >nul 2>nul
@@ -91,7 +103,9 @@ if errorlevel 1 (
 ) else (
   call pm2 restart workorder
 )
+if errorlevel 1 goto :error
 call pm2 save
+if errorlevel 1 goto :error
 
 echo.
 echo ================================================
