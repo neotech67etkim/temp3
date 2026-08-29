@@ -160,6 +160,48 @@ pm2 restart workorder   # 또는: sudo systemctl restart workorder
 버전으로 사용할 수 있습니다. 데이터(`DATA_DIR`)는 배포와 무관하게 그대로
 보존됩니다.
 
+### 자동 업데이트(Windows 작업 스케줄러, 사람이 안 지켜봐도 되는 방식)
+
+개발은 다른 PC에서 하고 서버 PC는 원격으로만 가끔 접속하는 구조라면, 매번
+직접 들어가서 위 명령을 치는 대신 `server-update.bat`을 하루 몇 번 자동
+실행하도록 등록해두는 게 편합니다. 이 스크립트는 아무것도 물어보지 않고
+`git fetch` → `git reset --hard`(원격 브랜치 상태로 강제로 맞춤) → `npm ci`
+→ 빌드 → `pm2 restart`까지 조용히 처리하고, 결과를 저장소 루트의
+`update-log.txt`에 남깁니다. (최초 `.env` 설정은 `server-start.bat`으로
+미리 한 번 끝내둔 상태여야 합니다.)
+
+서버 PC에서 최초 한 번, 관리자 권한 PowerShell/명령 프롬프트로 하루 2번
+(예: 오전 8시, 오후 8시) 실행되도록 등록합니다 — 아래 `<저장소 경로>`는
+그 PC에서 실제로 `git clone`한 폴더 경로로 바꿔서 입력하세요:
+
+```powershell
+schtasks /create /tn "WorkOrder Update AM" /tr "<저장소 경로>\server-update.bat" /sc daily /st 08:00
+schtasks /create /tn "WorkOrder Update PM" /tr "<저장소 경로>\server-update.bat" /sc daily /st 20:00
+```
+
+등록됐는지 확인:
+
+```powershell
+schtasks /query /tn "WorkOrder Update AM"
+schtasks /query /tn "WorkOrder Update PM"
+```
+
+지금 당장 한 번 테스트로 실행해보려면:
+
+```powershell
+schtasks /run /tn "WorkOrder Update AM"
+```
+
+몇 초~몇 분 뒤 `update-log.txt`를 열어 "업데이트 완료"로 끝났는지 확인하세요.
+
+> 이 작업은 **지금 로그인된 계정**으로 등록됩니다(pm2가 그 계정 소유로
+>떠 있어야 `pm2 restart`가 인식되기 때문). 원격 데스크톱으로 로그인한 뒤
+> 연결만 끊고(로그아웃하지 않고) 그대로 두면, Windows는 백그라운드에서
+> 그 세션을 계속 유지하므로 예약된 작업도 정상적으로 돌아갑니다. 만약
+> 정말 로그아웃 상태에서도 돌아가야 한다면 작업 스케줄러 GUI에서 그
+> 작업의 속성 → "사용자가 로그온했는지 여부에 관계없이 실행"으로 바꾸고
+> 계정 암호를 입력해줘야 합니다.
+
 ## 백업
 
 `DATA_DIR` 아래 `*.db` 파일들이 실제 데이터 전부입니다. 정기적으로(예:

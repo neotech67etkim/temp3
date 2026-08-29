@@ -30,6 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# server-update.bat 실행 로그 (서버 PC에서 생성됨)
+update-log.txt
+
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
